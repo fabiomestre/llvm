@@ -170,7 +170,8 @@ TEST(ParseAllowListTests, CheckAllValidBackendNameValuesAreProcessed) {
       {{"BackendName", "host"}},       {{"BackendName", "opencl"}},
       {{"BackendName", "level_zero"}}, {{"BackendName", "cuda"}},
       {{"BackendName", "hip"}},        {{"BackendName", "esimd_emulator"}},
-      {{"BackendName", "native_cpu"}}, {{"BackendName", "*"}}};
+      {{"BackendName", "native_cpu"}}, {{"BackendName", "libomptarget"}},
+      {{"BackendName", "*"}}};
   EXPECT_EQ(ExpectedValue, ActualValue);
 }
 

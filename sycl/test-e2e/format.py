@@ -15,6 +15,8 @@ def get_triple(test, backend):
             return 'amdgcn-amd-amdhsa'
     if backend == 'native_cpu':
         return 'native_cpu'
+    if backend == 'libomptarget':
+        return 'libomptarget'
     return 'spir64'
 
 class SYCLEndToEndTest(lit.formats.ShTest):

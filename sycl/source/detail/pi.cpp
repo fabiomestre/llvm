@@ -309,6 +309,8 @@ std::vector<std::pair<std::string, backend>> findPlugins() {
     PluginNames.emplace_back(__SYCL_UR_PLUGIN_NAME, backend::all);
     PluginNames.emplace_back(__SYCL_NATIVE_CPU_PLUGIN_NAME,
                              backend::ext_native_cpu);
+    PluginNames.emplace_back(__SYCL_LIBOMPTARGET_PLUGIN_NAME,
+                             backend::ext_libomptarget);
   } else if (FilterList) {
     std::vector<device_filter> Filters = FilterList->get();
     bool OpenCLFound = false;
@@ -317,6 +319,7 @@ std::vector<std::pair<std::string, backend>> findPlugins() {
     bool EsimdCpuFound = false;
     bool HIPFound = false;
     bool NativeCPUFound = false;
+    bool LibOMPTargetFound = false;
     for (const device_filter &Filter : Filters) {
       backend Backend = Filter.Backend ? Filter.Backend.value() : backend::all;
       if (!OpenCLFound &&
@@ -352,6 +355,11 @@ std::vector<std::pair<std::string, backend>> findPlugins() {
         PluginNames.emplace_back(__SYCL_NATIVE_CPU_PLUGIN_NAME,
                                  backend::ext_native_cpu);
       }
+      if (!LibOMPTargetFound &&
+          (Backend == backend::ext_libomptarget || Backend == backend::all)) {
+        PluginNames.emplace_back(__SYCL_LIBOMPTARGET_PLUGIN_NAME,
+                                 backend::ext_libomptarget);
+      }
       PluginNames.emplace_back(__SYCL_UR_PLUGIN_NAME, backend::all);
     }
   } else {
@@ -377,6 +385,10 @@ std::vector<std::pair<std::string, backend>> findPlugins() {
     if (list.backendCompatible(backend::ext_native_cpu)) {
       PluginNames.emplace_back(__SYCL_NATIVE_CPU_PLUGIN_NAME,
                                backend::ext_native_cpu);
+    }
+    if (list.backendCompatible(backend::ext_libomptarget)) {
+      PluginNames.emplace_back(__SYCL_LIBOMPTARGET_PLUGIN_NAME,
+                               backend::ext_libomptarget);
     }
     PluginNames.emplace_back(__SYCL_UR_PLUGIN_NAME, backend::all);
   }

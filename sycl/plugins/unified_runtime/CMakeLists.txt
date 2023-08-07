@@ -56,78 +56,85 @@ target_include_directories(UnifiedRuntime-Headers
 
 find_package(Threads REQUIRED)
 
-add_sycl_plugin(unified_runtime
+set(UNIFIED_RUNTIME_PLUGIN_ARGS
   SOURCES
     # These are short-term shared with Unified Runtime
-    # The two plugins define a few things differrently so must
+    # The two plugins define a few things differently so must
     # be built separately. This difference is spelled in
     # their "ur_bindings.hpp" files.
-    #
     "ur_bindings.hpp"
     "pi2ur.hpp"
     "pi2ur.cpp"
     # These below belong to Unified Runtime PI Plugin only
     "pi_unified_runtime.hpp"
     "pi_unified_runtime.cpp"
-    LIBRARIES
+  LIBRARIES
     Threads::Threads
     UnifiedRuntimeLoader
     UnifiedRuntime-Headers
-    LevelZeroLoader-Headers # we need for #include <ze_api.h> in common.h
 )
+
+# We need for #include <ze_api.h> in common.h
+if ("level_zero" IN_LIST SYCL_ENABLE_PLUGINS)
+  list(APPEND UNIFIED_RUNTIME_PLUGIN_ARGS LevelZeroLoader-Headers)
+endif()
+
+add_sycl_plugin(unified_runtime ${UNIFIED_RUNTIME_PLUGIN_ARGS})
 
 # Build level zero adapter
-add_sycl_library("ur_adapter_level_zero" SHARED
-  SOURCES
-    "ur/ur.hpp"
-    "ur/ur.cpp"
-    "ur/adapters/level_zero/ur_level_zero.hpp"
-    "ur/adapters/level_zero/ur_level_zero.cpp"
-    "ur/adapters/level_zero/ur_interface_loader.cpp"
-    "ur/adapters/level_zero/adapter.hpp"
-    "ur/adapters/level_zero/command_buffer.hpp"
-    "ur/adapters/level_zero/common.hpp"
-    "ur/adapters/level_zero/context.hpp"
-    "ur/adapters/level_zero/device.hpp"
-    "ur/adapters/level_zero/event.hpp"
-    "ur/adapters/level_zero/image.cpp"
-    "ur/adapters/level_zero/image.hpp"
-    "ur/adapters/level_zero/memory.hpp"
-    "ur/adapters/level_zero/kernel.hpp"
-    "ur/adapters/level_zero/platform.hpp"
-    "ur/adapters/level_zero/program.hpp"
-    "ur/adapters/level_zero/queue.hpp"
-    "ur/adapters/level_zero/sampler.hpp"
-    "ur/adapters/level_zero/usm.hpp"
-    "ur/adapters/level_zero/adapter.cpp"
-    "ur/adapters/level_zero/command_buffer.cpp"
-    "ur/adapters/level_zero/common.cpp"
-    "ur/adapters/level_zero/context.cpp"
-    "ur/adapters/level_zero/device.cpp"
-    "ur/adapters/level_zero/event.cpp"
-    "ur/adapters/level_zero/memory.cpp"
-    "ur/adapters/level_zero/kernel.cpp"
-    "ur/adapters/level_zero/platform.cpp"
-    "ur/adapters/level_zero/program.cpp"
-    "ur/adapters/level_zero/queue.cpp"
-    "ur/adapters/level_zero/sampler.cpp"
-    "ur/adapters/level_zero/usm.cpp"
-    "ur/adapters/level_zero/usm_p2p.cpp"
-  INCLUDE_DIRS
-    ${sycl_inc_dir}
-  LIBRARIES
-    UnifiedRuntime-Headers
-    UnifiedRuntimeCommon
-    UnifiedMallocFramework
-    LevelZeroLoader-Headers
-    LevelZeroLoader
-    Threads::Threads
-)
+if ("level_zero" IN_LIST SYCL_ENABLE_PLUGINS)
+  add_sycl_library("ur_adapter_level_zero" SHARED
+    SOURCES
+      "ur/ur.hpp"
+      "ur/ur.cpp"
+      "ur/adapters/level_zero/ur_level_zero.hpp"
+      "ur/adapters/level_zero/ur_level_zero.cpp"
+      "ur/adapters/level_zero/ur_interface_loader.cpp"
+      "ur/adapters/level_zero/adapter.hpp"
+      "ur/adapters/level_zero/command_buffer.hpp"
+      "ur/adapters/level_zero/common.hpp"
+      "ur/adapters/level_zero/context.hpp"
+      "ur/adapters/level_zero/device.hpp"
+      "ur/adapters/level_zero/event.hpp"
+      "ur/adapters/level_zero/image.cpp"
+      "ur/adapters/level_zero/image.hpp"
+      "ur/adapters/level_zero/memory.hpp"
+      "ur/adapters/level_zero/kernel.hpp"
+      "ur/adapters/level_zero/platform.hpp"
+      "ur/adapters/level_zero/program.hpp"
+      "ur/adapters/level_zero/queue.hpp"
+      "ur/adapters/level_zero/sampler.hpp"
+      "ur/adapters/level_zero/usm.hpp"
+      "ur/adapters/level_zero/adapter.cpp"
+      "ur/adapters/level_zero/command_buffer.cpp"
+      "ur/adapters/level_zero/common.cpp"
+      "ur/adapters/level_zero/context.cpp"
+      "ur/adapters/level_zero/device.cpp"
+      "ur/adapters/level_zero/event.cpp"
+      "ur/adapters/level_zero/memory.cpp"
+      "ur/adapters/level_zero/kernel.cpp"
+      "ur/adapters/level_zero/platform.cpp"
+      "ur/adapters/level_zero/program.cpp"
+      "ur/adapters/level_zero/queue.cpp"
+      "ur/adapters/level_zero/sampler.cpp"
+      "ur/adapters/level_zero/usm.cpp"
+      "ur/adapters/level_zero/usm_p2p.cpp"
+    INCLUDE_DIRS
+      ${sycl_inc_dir}
+    LIBRARIES
+      UnifiedRuntime-Headers
+      UnifiedRuntimeCommon
+      UnifiedMallocFramework
+      LevelZeroLoader-Headers
+      LevelZeroLoader
+      Threads::Threads
+  )
 
-set_target_properties("ur_adapter_level_zero" PROPERTIES
-    VERSION "0.0.0"
-    SOVERSION "0"
-)
+  set_target_properties("ur_adapter_level_zero" PROPERTIES
+      VERSION "0.0.0"
+      SOVERSION "0"
+  )
+endif()
 
 if ("cuda" IN_LIST SYCL_ENABLE_PLUGINS)
   # Build CUDA adapter
@@ -282,6 +289,52 @@ if("native_cpu" IN_LIST SYCL_ENABLE_PLUGINS)
   )
 endif()
 
+if("libomptarget" IN_LIST SYCL_ENABLE_PLUGINS)
+  add_sycl_library("ur_adapter_libomptarget" SHARED
+    SOURCES
+      "ur/ur.hpp"
+      "ur/ur.cpp"
+      "ur/adapters/libomptarget/adapter.cpp"
+      "ur/adapters/libomptarget/command_buffer.cpp"
+      "ur/adapters/libomptarget/common.cpp"
+      "ur/adapters/libomptarget/common.hpp"
+      "ur/adapters/libomptarget/context.cpp"
+      "ur/adapters/libomptarget/device.cpp"
+      "ur/adapters/libomptarget/enqueue.cpp"
+      "ur/adapters/libomptarget/event.cpp"
+      "ur/adapters/libomptarget/image.cpp"
+      "ur/adapters/libomptarget/kernel.cpp"
+      "ur/adapters/libomptarget/memory.cpp"
+      "ur/adapters/libomptarget/platform.cpp"
+      "ur/adapters/libomptarget/program.cpp"
+      "ur/adapters/libomptarget/queue.cpp"
+      "ur/adapters/libomptarget/sampler.cpp"
+      "ur/adapters/libomptarget/ur_interface_loader.cpp"
+      "ur/adapters/libomptarget/usm.cpp"
+      "ur/adapters/libomptarget/usm_p2p.cpp"
+    INCLUDE_DIRS
+      ${CMAKE_CURRENT_SOURCE_DIR}/../../../openmp/libomptarget/include
+      ${sycl_inc_dir}
+    LIBRARIES
+      UnifiedRuntime-Headers
+      Threads::Threads
+      sycl
+      omptarget
+      omptarget.rtl.cuda.nextgen
+  )
+
+  if (NOT "NVPTX" IN_LIST LLVM_TARGETS_TO_BUILD OR NOT "X86" IN_LIST LLVM_TARGETS_TO_BUILD)
+    message(FATAL_ERROR, "Need to add 'X86;NVPTX' to LLVM_TARGETS_TO_BUILD option when building the libomptarget UR adapter")
+  endif()
+  if (NOT "openmp" IN_LIST LLVM_ENABLE_PROJECTS)
+    message(FATAL_ERROR, "Need to add 'openmp' to LLVM_ENABLE_PROJECTS option when building the libomptarget adapter")
+  endif()
+
+  set_target_properties("ur_adapter_libomptarget" PROPERTIES
+    VERSION "0.0.0"
+    SOVERSION "0"
+  )
+endif()
 
 if (TARGET UnifiedRuntimeLoader)
   set_target_properties(hello_world PROPERTIES EXCLUDE_FROM_ALL 1 EXCLUDE_FROM_DEFAULT_BUILD 1)
@@ -297,8 +350,10 @@ if (TARGET UnifiedRuntimeLoader)
 endif()
 
 # Install the UR adapters too
-install(TARGETS ur_adapter_level_zero
-  LIBRARY DESTINATION "lib${LLVM_LIBDIR_SUFFIX}" COMPONENT level-zero-sycl-dev
-  ARCHIVE DESTINATION "lib${LLVM_LIBDIR_SUFFIX}" COMPONENT level-zero-sycl-dev
-  RUNTIME DESTINATION "bin" COMPONENT level-zero-sycl-dev
-)
+if ("level_zero" IN_LIST SYCL_ENABLE_PLUGINS)
+  install(TARGETS ur_adapter_level_zero
+    LIBRARY DESTINATION "lib${LLVM_LIBDIR_SUFFIX}" COMPONENT level-zero-sycl-dev
+    ARCHIVE DESTINATION "lib${LLVM_LIBDIR_SUFFIX}" COMPONENT level-zero-sycl-dev
+    RUNTIME DESTINATION "bin" COMPONENT level-zero-sycl-dev
+  )
+endif()

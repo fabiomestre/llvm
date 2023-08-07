@@ -109,6 +109,7 @@ std::string getCurrentDSODir() {
 #define __SYCL_HIP_PLUGIN_NAME "libpi_hip.dll"
 #define __SYCL_UNIFIED_RUNTIME_PLUGIN_NAME "pi_unified_runtime.dll"
 #define __SYCL_NATIVE_CPU_PLUGIN_NAME "pi_native_cpu.dll"
+#define __SYCL_LIBOMPTARGET_PLUGIN_NAME "pi_libomptarget.dll"
 #else // llvm-mingw
 #define __SYCL_OPENCL_PLUGIN_NAME "libpi_opencl.dll"
 #define __SYCL_LEVEL_ZERO_PLUGIN_NAME "libpi_level_zero.dll"
@@ -117,6 +118,7 @@ std::string getCurrentDSODir() {
 #define __SYCL_HIP_PLUGIN_NAME "libpi_hip.dll"
 #define __SYCL_UNIFIED_RUNTIME_PLUGIN_NAME "libpi_unified_runtime.dll"
 #define __SYCL_NATIVE_CPU_PLUGIN_NAME "libpi_native_cpu.dll"
+#define __SYCL_LIBOMPTARGET_PLUGIN_NAME "libpi_libomptarget.dll"
 #endif
 
 // ------------------------------------

@@ -73,6 +73,7 @@ bool trace(TraceLevel level);
 #define __SYCL_HIP_PLUGIN_NAME "libpi_hip.dll"
 #define __SYCL_UR_PLUGIN_NAME "pi_unified_runtime.dll"
 #define __SYCL_NATIVE_CPU_PLUGIN_NAME "pi_native_cpu.dll"
+#define __SYCL_LIBOMPTARGET_PLUGIN_NAME "pi_libomptarget.dll"
 #else
 #define __SYCL_OPENCL_PLUGIN_NAME "libpi_opencl.dll"
 #define __SYCL_LEVEL_ZERO_PLUGIN_NAME "libpi_level_zero.dll"
@@ -81,6 +82,7 @@ bool trace(TraceLevel level);
 #define __SYCL_HIP_PLUGIN_NAME "libpi_hip.dll"
 #define __SYCL_UR_PLUGIN_NAME "libpi_unified_runtime.dll"
 #define __SYCL_NATIVE_CPU_PLUGIN_NAME "libpi_native_cpu.dll"
+#define __SYCL_LIBOMPTARGET_PLUGIN_NAME "libpi_libomptarget.dll"
 #endif
 #elif defined(__SYCL_RT_OS_LINUX)
 #define __SYCL_OPENCL_PLUGIN_NAME "libpi_opencl.so"
@@ -90,6 +92,7 @@ bool trace(TraceLevel level);
 #define __SYCL_HIP_PLUGIN_NAME "libpi_hip.so"
 #define __SYCL_UR_PLUGIN_NAME "libpi_unified_runtime.so"
 #define __SYCL_NATIVE_CPU_PLUGIN_NAME "libpi_native_cpu.so"
+#define __SYCL_LIBOMPTARGET_PLUGIN_NAME "libpi_libomptarget.so"
 #elif defined(__SYCL_RT_OS_DARWIN)
 #define __SYCL_OPENCL_PLUGIN_NAME "libpi_opencl.dylib"
 #define __SYCL_LEVEL_ZERO_PLUGIN_NAME "libpi_level_zero.dylib"
@@ -98,6 +101,7 @@ bool trace(TraceLevel level);
 #define __SYCL_HIP_PLUGIN_NAME "libpi_hip.dylib"
 #define __SYCL_UR_PLUGIN_NAME "libpi_unified_runtime.dylib"
 #define __SYCL_NATIVE_CPU_PLUGIN_NAME "libpi_native_cpu.dylib"
+#define __SYCL_LIBOMPTARGET_PLUGIN_NAME "libpi_libomptarget.dylib"
 #else
 #error "Unsupported OS"
 #endif

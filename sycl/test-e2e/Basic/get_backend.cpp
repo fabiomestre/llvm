@@ -20,6 +20,7 @@ bool check(backend be) {
   case backend::ext_oneapi_cuda:
   case backend::ext_oneapi_hip:
   case backend::ext_native_cpu:
+  case backend::ext_libomptarget:
     return true;
   default:
     return false;
