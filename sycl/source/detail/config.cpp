@@ -177,8 +177,8 @@ getSyclDeviceTypeMap() {
 
 // Array is used by SYCL_DEVICE_FILTER and SYCL_DEVICE_ALLOWLIST and
 // ONEAPI_DEVICE_SELECTOR
-const std::array<std::pair<std::string, backend>, 8> &getSyclBeMap() {
-  static const std::array<std::pair<std::string, backend>, 8> SyclBeMap = {
+const std::array<std::pair<std::string, backend>, 9> &getSyclBeMap() {
+  static const std::array<std::pair<std::string, backend>, 9> SyclBeMap = {
       {{"host", backend::host},
        {"opencl", backend::opencl},
        {"level_zero", backend::ext_oneapi_level_zero},
@@ -186,6 +186,7 @@ const std::array<std::pair<std::string, backend>, 8> &getSyclBeMap() {
        {"hip", backend::ext_oneapi_hip},
        {"esimd_emulator", backend::ext_intel_esimd_emulator},
        {"native_cpu", backend::ext_native_cpu},
+       {"libomptarget", backend::ext_libomptarget},
        {"*", backend::all}}};
   return SyclBeMap;
 }

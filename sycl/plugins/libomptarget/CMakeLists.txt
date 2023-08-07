@@ -1,0 +1,37 @@
+add_sycl_plugin(libomptarget
+  SOURCES
+    "../unified_runtime/pi2ur.hpp"
+    "../unified_runtime/pi2ur.cpp"
+    "../unified_runtime/ur/ur.hpp"
+    "../unified_runtime/ur/ur.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/adapter.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/common.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/common.hpp"
+    "../unified_runtime/ur/adapters/libomptarget/context.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/device.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/enqueue.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/image.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/kernel.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/platform.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/sampler.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/memory.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/usm.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/program.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/event.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/queue.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/command_buffer.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/usm_p2p.cpp"
+    "${sycl_inc_dir}/sycl/detail/pi.h"
+    "pi_libomptarget.cpp"
+    "pi_libomptarget.hpp"
+  INCLUDE_DIRS
+    ${sycl_inc_dir}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../unified_runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../openmp/libomptarget/include
+  LIBRARIES
+    UnifiedRuntime-Headers
+    omptarget
+    omptarget.rtl.cuda.nextgen
+)
+
+set_target_properties(pi_libomptarget PROPERTIES LINKER_LANGUAGE CXX)
