@@ -16,7 +16,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urUSMPitchedAllocExp(
     [[maybe_unused]] size_t widthInBytes, [[maybe_unused]] size_t height,
     [[maybe_unused]] size_t elementSizeBytes, [[maybe_unused]] void **ppMem,
     [[maybe_unused]] size_t *pResultPitch) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -25,7 +25,7 @@ urBindlessImagesUnsampledImageHandleDestroyExp(
     [[maybe_unused]] ur_context_handle_t hContext,
     [[maybe_unused]] ur_device_handle_t hDevice,
     [[maybe_unused]] ur_exp_image_handle_t hImage) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -34,7 +34,7 @@ urBindlessImagesSampledImageHandleDestroyExp(
     [[maybe_unused]] ur_context_handle_t hContext,
     [[maybe_unused]] ur_device_handle_t hDevice,
     [[maybe_unused]] ur_exp_image_handle_t hImage) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -44,7 +44,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesImageAllocateExp(
     [[maybe_unused]] const ur_image_format_t *pImageFormat,
     [[maybe_unused]] const ur_image_desc_t *pImageDesc,
     [[maybe_unused]] ur_exp_image_mem_handle_t *phImageMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -52,7 +52,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesImageFreeExp(
     [[maybe_unused]] ur_context_handle_t hContext,
     [[maybe_unused]] ur_device_handle_t hDevice,
     [[maybe_unused]] ur_exp_image_mem_handle_t hImageMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -64,7 +64,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesUnsampledImageCreateExp(
     [[maybe_unused]] const ur_image_desc_t *pImageDesc,
     [[maybe_unused]] ur_mem_handle_t *phMem,
     [[maybe_unused]] ur_exp_image_handle_t *phImage) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -77,7 +77,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesSampledImageCreateExp(
     [[maybe_unused]] ur_sampler_handle_t hSampler,
     [[maybe_unused]] ur_mem_handle_t *phMem,
     [[maybe_unused]] ur_exp_image_handle_t *phImage) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -94,7 +94,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesImageCopyExp(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -102,7 +102,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesImageGetInfoExp(
     [[maybe_unused]] ur_exp_image_mem_handle_t hImageMem,
     [[maybe_unused]] ur_image_info_t propName,
     [[maybe_unused]] void *pPropValue, [[maybe_unused]] size_t *pPropSizeRet) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -112,7 +112,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesMipmapGetLevelExp(
     [[maybe_unused]] ur_exp_image_mem_handle_t hImageMem,
     [[maybe_unused]] uint32_t mipmapLevel,
     [[maybe_unused]] ur_exp_image_mem_handle_t *phImageMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -120,7 +120,7 @@ UR_APIEXPORT ur_result_t UR_APICALL
 urBindlessImagesMipmapFreeExp([[maybe_unused]] ur_context_handle_t hContext,
                               [[maybe_unused]] ur_device_handle_t hDevice,
                               [[maybe_unused]] ur_exp_image_mem_handle_t hMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -129,7 +129,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesImportOpaqueFDExp(
     [[maybe_unused]] ur_device_handle_t hDevice, [[maybe_unused]] size_t size,
     [[maybe_unused]] ur_exp_interop_mem_desc_t *pInteropMemDesc,
     [[maybe_unused]] ur_exp_interop_mem_handle_t *phInteropMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -140,7 +140,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesMapExternalArrayExp(
     [[maybe_unused]] const ur_image_desc_t *pImageDesc,
     [[maybe_unused]] ur_exp_interop_mem_handle_t hInteropMem,
     [[maybe_unused]] ur_exp_image_mem_handle_t *phImageMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -148,7 +148,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesReleaseInteropExp(
     [[maybe_unused]] ur_context_handle_t hContext,
     [[maybe_unused]] ur_device_handle_t hDevice,
     [[maybe_unused]] ur_exp_interop_mem_handle_t hInteropMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -159,7 +159,7 @@ urBindlessImagesImportExternalSemaphoreOpaqueFDExp(
     [[maybe_unused]] ur_exp_interop_semaphore_desc_t *pInteropSemaphoreDesc,
     [[maybe_unused]] ur_exp_interop_semaphore_handle_t
         *phInteropSemaphoreHandle) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -167,7 +167,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesDestroyExternalSemaphoreExp(
     [[maybe_unused]] ur_context_handle_t hContext,
     [[maybe_unused]] ur_device_handle_t hDevice,
     [[maybe_unused]] ur_exp_interop_semaphore_handle_t hInteropSemaphore) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -177,7 +177,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesWaitExternalSemaphoreExp(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -187,6 +187,6 @@ UR_APIEXPORT ur_result_t UR_APICALL urBindlessImagesSignalExternalSemaphoreExp(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }

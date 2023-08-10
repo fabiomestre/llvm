@@ -18,7 +18,7 @@ urEnqueueKernelLaunch([[maybe_unused]] ur_queue_handle_t hQueue,
                       [[maybe_unused]] uint32_t numEventsInWaitList,
                       [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
                       [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -27,7 +27,7 @@ urEnqueueEventsWait([[maybe_unused]] ur_queue_handle_t hQueue,
                     [[maybe_unused]] uint32_t numEventsInWaitList,
                     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
                     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -36,7 +36,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueEventsWaitWithBarrier(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -48,7 +48,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemBufferRead(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -60,7 +60,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemBufferWrite(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -78,7 +78,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemBufferReadRect(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -96,7 +96,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemBufferWriteRect(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -108,7 +108,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemBufferCopy(
     [[maybe_unused]] size_t size, [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -124,7 +124,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemBufferCopyRect(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -136,7 +136,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemBufferFill(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -149,7 +149,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemImageRead(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -163,7 +163,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemImageWrite(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -177,7 +177,7 @@ urEnqueueMemImageCopy([[maybe_unused]] ur_queue_handle_t hQueue,
                       [[maybe_unused]] uint32_t numEventsInWaitList,
                       [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
                       [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -189,7 +189,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemBufferMap(
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent,
     [[maybe_unused]] void **ppRetMap) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -199,7 +199,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueMemUnmap(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -212,7 +212,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueDeviceGlobalVariableWrite(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -224,7 +224,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueDeviceGlobalVariableRead(
     [[maybe_unused]] void *pDst, [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -236,7 +236,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueReadHostPipe(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -248,6 +248,6 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueWriteHostPipe(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }

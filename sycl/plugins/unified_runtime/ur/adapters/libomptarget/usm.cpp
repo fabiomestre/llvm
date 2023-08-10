@@ -13,7 +13,7 @@ urUSMHostAlloc([[maybe_unused]] ur_context_handle_t hContext,
                [[maybe_unused]] const ur_usm_desc_t *pUSMDesc,
                [[maybe_unused]] ur_usm_pool_handle_t,
                [[maybe_unused]] size_t size, [[maybe_unused]] void **ppMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -23,7 +23,7 @@ urUSMDeviceAlloc([[maybe_unused]] ur_context_handle_t hContext,
                  [[maybe_unused]] const ur_usm_desc_t *pUSMDesc,
                  [[maybe_unused]] ur_usm_pool_handle_t,
                  [[maybe_unused]] size_t size, [[maybe_unused]] void **ppMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -33,14 +33,14 @@ urUSMSharedAlloc([[maybe_unused]] ur_context_handle_t hContext,
                  [[maybe_unused]] const ur_usm_desc_t *pUSMDesc,
                  [[maybe_unused]] ur_usm_pool_handle_t,
                  [[maybe_unused]] size_t size, [[maybe_unused]] void **ppMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL
 urUSMFree([[maybe_unused]] ur_context_handle_t hContext,
           [[maybe_unused]] void *pMem) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -50,7 +50,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueUSMFill(
     [[maybe_unused]] size_t size, [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -60,7 +60,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueUSMMemcpy(
     [[maybe_unused]] size_t size, [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -71,7 +71,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueUSMPrefetch(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -80,7 +80,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueUSMAdvise(
     [[maybe_unused]] const void *pMem, [[maybe_unused]] size_t size,
     [[maybe_unused]] ur_usm_advice_flags_t advice,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -92,7 +92,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueUSMFill2D(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -104,7 +104,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urEnqueueUSMMemcpy2D(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -114,20 +114,20 @@ UR_APIEXPORT ur_result_t UR_APICALL urUSMGetMemAllocInfo(
     [[maybe_unused]] ur_usm_alloc_info_t propName,
     [[maybe_unused]] size_t propSize, [[maybe_unused]] void *pPropValue,
     [[maybe_unused]] size_t *pPropSizeRet) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL
 urUSMImportExp([[maybe_unused]] ur_context_handle_t Context,
                [[maybe_unused]] void *HostPtr, [[maybe_unused]] size_t Size) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL
 urUSMReleaseExp([[maybe_unused]] ur_context_handle_t Context,
                 [[maybe_unused]] void *HostPtr) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }

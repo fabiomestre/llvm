@@ -15,25 +15,25 @@ UR_APIEXPORT ur_result_t UR_APICALL urCommandBufferCreateExp(
     [[maybe_unused]] ur_device_handle_t hDevice,
     [[maybe_unused]] const ur_exp_command_buffer_desc_t *pCommandBufferDesc,
     [[maybe_unused]] ur_exp_command_buffer_handle_t *phCommandBuffer) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL urCommandBufferRetainExp(
     [[maybe_unused]] ur_exp_command_buffer_handle_t hCommandBuffer) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL urCommandBufferReleaseExp(
     [[maybe_unused]] ur_exp_command_buffer_handle_t hCommandBuffer) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL urCommandBufferFinalizeExp(
     [[maybe_unused]] ur_exp_command_buffer_handle_t hCommandBuffer) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -48,7 +48,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urCommandBufferAppendKernelLaunchExp(
     [[maybe_unused]] const ur_exp_command_buffer_sync_point_t
         *pSyncPointWaitList,
     [[maybe_unused]] ur_exp_command_buffer_sync_point_t *pSyncPoint) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -60,7 +60,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urCommandBufferAppendMemcpyUSMExp(
     [[maybe_unused]] const ur_exp_command_buffer_sync_point_t
         *pSyncPointWaitList,
     [[maybe_unused]] ur_exp_command_buffer_sync_point_t *pSyncPoint) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -73,7 +73,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urCommandBufferAppendMembufferCopyExp(
     [[maybe_unused]] const ur_exp_command_buffer_sync_point_t
         *pSyncPointWaitList,
     [[maybe_unused]] ur_exp_command_buffer_sync_point_t *pSyncPoint) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -90,7 +90,7 @@ UR_APIEXPORT ur_result_t UR_APICALL urCommandBufferAppendMembufferCopyRectExp(
     [[maybe_unused]] const ur_exp_command_buffer_sync_point_t
         *pSyncPointWaitList,
     [[maybe_unused]] ur_exp_command_buffer_sync_point_t *pSyncPoint) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -103,7 +103,7 @@ ur_result_t UR_APICALL urCommandBufferAppendMembufferWriteExp(
     [[maybe_unused]] const ur_exp_command_buffer_sync_point_t
         *pSyncPointWaitList,
     [[maybe_unused]] ur_exp_command_buffer_sync_point_t *pSyncPoint) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -116,7 +116,7 @@ ur_result_t UR_APICALL urCommandBufferAppendMembufferReadExp(
     [[maybe_unused]] const ur_exp_command_buffer_sync_point_t
         *pSyncPointWaitList,
     [[maybe_unused]] ur_exp_command_buffer_sync_point_t *pSyncPoint) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -135,7 +135,7 @@ ur_result_t UR_APICALL urCommandBufferAppendMembufferWriteRectExp(
     [[maybe_unused]] const ur_exp_command_buffer_sync_point_t
         *pSyncPointWaitList,
     [[maybe_unused]] ur_exp_command_buffer_sync_point_t *pSyncPoint) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -154,7 +154,7 @@ ur_result_t UR_APICALL urCommandBufferAppendMembufferReadRectExp(
     [[maybe_unused]] const ur_exp_command_buffer_sync_point_t
         *pSyncPointWaitList,
     [[maybe_unused]] ur_exp_command_buffer_sync_point_t *pSyncPoint) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }
 
@@ -164,6 +164,6 @@ UR_APIEXPORT ur_result_t UR_APICALL urCommandBufferEnqueueExp(
     [[maybe_unused]] uint32_t numEventsInWaitList,
     [[maybe_unused]] const ur_event_handle_t *phEventWaitList,
     [[maybe_unused]] ur_event_handle_t *phEvent) {
-  omptarget_adapter::die("Feature is not implemented");
+  OMPT_DIE("Feature is not implemented");
   return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
 }

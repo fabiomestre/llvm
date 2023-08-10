@@ -295,6 +295,7 @@ if("libomptarget" IN_LIST SYCL_ENABLE_PLUGINS)
       "ur/ur.hpp"
       "ur/ur.cpp"
       "ur/adapters/libomptarget/adapter.cpp"
+      "ur/adapters/libomptarget/adapter.hpp"
       "ur/adapters/libomptarget/command_buffer.cpp"
       "ur/adapters/libomptarget/common.cpp"
       "ur/adapters/libomptarget/common.hpp"

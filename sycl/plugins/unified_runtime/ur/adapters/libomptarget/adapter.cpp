@@ -6,55 +6,73 @@
 //
 //===-----------------------------------------------------------------===//
 
+#include "adapter.hpp"
 #include "common.hpp"
-#include <omptargetplugin.h>
+
+ur_adapter_handle_t_ adapter{};
 
 UR_APIEXPORT ur_result_t UR_APICALL
 urInit([[maybe_unused]] ur_device_init_flags_t,
        [[maybe_unused]] ur_loader_config_handle_t) {
 
-  __tgt_rtl_init_plugin();
-  omptarget_adapter::die("Feature is not implemented");
-  return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  OMPT_RETURN_ON_FAILURE(__tgt_rtl_init_plugin());
+  return UR_RESULT_SUCCESS;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL urTearDown([[maybe_unused]] void *) {
-  omptarget_adapter::die("Feature is not implemented");
-  return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  OMPT_RETURN_ON_FAILURE(__tgt_rtl_deinit_plugin());
+  return UR_RESULT_SUCCESS;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL
-urAdapterGet([[maybe_unused]] uint32_t NumEntries,
-             [[maybe_unused]] ur_adapter_handle_t *phAdapters,
-             [[maybe_unused]] uint32_t *pNumAdapters) {
-  omptarget_adapter::die("Feature is not implemented");
-  return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
+urAdapterGet(uint32_t NumEntries, ur_adapter_handle_t *phAdapters,
+             uint32_t *pNumAdapters) {
+  if (NumEntries > 0 && phAdapters) {
+    *phAdapters = &adapter;
+  }
+
+  if (pNumAdapters) {
+    *pNumAdapters = 1;
+  }
+
+  return UR_RESULT_SUCCESS;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL
 urAdapterRetain([[maybe_unused]] ur_adapter_handle_t) {
-  omptarget_adapter::die("Feature is not implemented");
-  return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  ++adapter.RefCount;
+  return UR_RESULT_SUCCESS;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL
 urAdapterRelease([[maybe_unused]] ur_adapter_handle_t) {
-  omptarget_adapter::die("Feature is not implemented");
-  return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
+  --adapter.RefCount;
+  return UR_RESULT_SUCCESS;
 }
 
-UR_APIEXPORT ur_result_t UR_APICALL urAdapterGetLastError(
-    [[maybe_unused]] ur_adapter_handle_t,
-    [[maybe_unused]] const char **ppMessage, [[maybe_unused]] int32_t *pError) {
-  omptarget_adapter::die("Feature is not implemented");
-  return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
+UR_APIEXPORT ur_result_t UR_APICALL
+urAdapterGetLastError([[maybe_unused]] ur_adapter_handle_t,
+                      const char **ppMessage, int32_t *pError) {
+  *ppMessage = omptarget_adapter::ErrorMessage;
+  *pError = omptarget_adapter::ErrorMessageCode;
+
+  return UR_RESULT_SUCCESS;
 }
 
 UR_APIEXPORT ur_result_t UR_APICALL urAdapterGetInfo(
-    [[maybe_unused]] ur_adapter_handle_t,
-    [[maybe_unused]] ur_adapter_info_t propName,
-    [[maybe_unused]] size_t propSize, [[maybe_unused]] void *pPropValue,
-    [[maybe_unused]] size_t *pPropSizeRet) {
-  omptarget_adapter::die("Feature is not implemented");
-  return UR_RESULT_ERROR_UNSUPPORTED_FEATURE;
+    [[maybe_unused]] ur_adapter_handle_t, ur_adapter_info_t propName,
+    size_t propSize, void *pPropValue, size_t *pPropSizeRet) {
+  UrReturnHelper ReturnValue(propSize, pPropValue, pPropSizeRet);
+
+  switch (propName) {
+  case UR_ADAPTER_INFO_BACKEND:
+    /* Using UNKNOWN since there is no libomptarget enum at the moment */
+    return ReturnValue(UR_ADAPTER_BACKEND_UNKNOWN);
+  case UR_ADAPTER_INFO_REFERENCE_COUNT:
+    return ReturnValue(adapter.RefCount.load());
+  default:
+    return UR_RESULT_ERROR_INVALID_ENUMERATION;
+  }
+
+  return UR_RESULT_SUCCESS;
 }

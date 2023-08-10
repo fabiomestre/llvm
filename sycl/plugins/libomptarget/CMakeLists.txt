@@ -5,6 +5,7 @@ add_sycl_plugin(libomptarget
     "../unified_runtime/ur/ur.hpp"
     "../unified_runtime/ur/ur.cpp"
     "../unified_runtime/ur/adapters/libomptarget/adapter.cpp"
+    "../unified_runtime/ur/adapters/libomptarget/adapter.hpp"
     "../unified_runtime/ur/adapters/libomptarget/common.cpp"
     "../unified_runtime/ur/adapters/libomptarget/common.hpp"
     "../unified_runtime/ur/adapters/libomptarget/context.cpp"
