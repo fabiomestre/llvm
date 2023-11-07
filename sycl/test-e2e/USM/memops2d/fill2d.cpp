@@ -15,8 +15,8 @@
 
 using namespace sycl;
 
-constexpr size_t RECT_WIDTH = 50;
-constexpr size_t RECT_HEIGHT = 21;
+//constexpr size_t RECT_WIDTH = 50000;
+//constexpr size_t RECT_HEIGHT = 5000;
 
 template <typename T, OperationPath PathKind>
 event doFill2D(queue &Q, void *Dest, size_t DestPitch, const T &Pattern,
@@ -40,7 +40,162 @@ event doFill2D(queue &Q, void *Dest, size_t DestPitch, const T &Pattern,
 }
 
 template <typename T, Alloc AllocKind, OperationPath PathKind>
-int test(queue &Q, T ExpectedVal1, T ExpectedVal2) {
+int test_bench(queue &Q, T ExpectedVal1, T ExpectedVal2) {
+  int Failures = 0;
+
+  size_t RECT_WIDTH = 50000 / sizeof(T);
+  size_t RECT_HEIGHT = 5000;
+  // Warmup Test 1
+  {
+    for (int i = 0; i < 3; ++i) {
+      size_t DST_ELEMS = RECT_WIDTH * RECT_HEIGHT;
+
+      T *USMMemDst = allocate<T, AllocKind>(DST_ELEMS, Q);
+      event DstMemsetEvent =
+          memset<AllocKind>(Q, USMMemDst, 0, DST_ELEMS * sizeof(T));
+      doFill2D<T, PathKind>(Q, USMMemDst, RECT_WIDTH, ExpectedVal1, RECT_WIDTH,
+                            RECT_HEIGHT, {DstMemsetEvent})
+          .wait();
+      free<AllocKind>(USMMemDst, Q);
+    }
+  }
+
+  // Test 1 - 2D fill entire buffer.
+  {
+    double sum = 0;
+    for (int i = 0; i < 10; ++i) {
+
+      size_t DST_ELEMS = RECT_WIDTH * RECT_HEIGHT;
+
+      T *USMMemDst = allocate<T, AllocKind>(DST_ELEMS, Q);
+      event DstMemsetEvent =
+          memset<AllocKind>(Q, USMMemDst, 0, DST_ELEMS * sizeof(T));
+      auto begin = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                       .count();
+      doFill2D<T, PathKind>(Q, USMMemDst, RECT_WIDTH, ExpectedVal1, RECT_WIDTH,
+                            RECT_HEIGHT, {DstMemsetEvent})
+          .wait();
+      auto end = std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::system_clock::now().time_since_epoch())
+                     .count();
+      sum += (end - begin);
+      free<AllocKind>(USMMemDst, Q);
+    }
+    std::cout << "Time: " << sum / 10.0 << std::endl;
+  }
+  //
+  //  // Test 2 - 2D fill vertically adjacent regions.
+  //  {
+  //    constexpr size_t DST_ELEMS = 2 * RECT_WIDTH * RECT_HEIGHT;
+  //
+  //    T *USMMemDst = allocate<T, AllocKind>(DST_ELEMS, Q);
+  //    event DstMemsetEvent =
+  //        memset<AllocKind>(Q, USMMemDst, 0, DST_ELEMS * sizeof(T));
+  //    event FirstFillEvent =
+  //        doFill2D<T, PathKind>(Q, USMMemDst, RECT_WIDTH, ExpectedVal1,
+  //                              RECT_WIDTH, RECT_HEIGHT, {DstMemsetEvent});
+  //    doFill2D<T, PathKind>(Q, USMMemDst + DST_ELEMS / 2, RECT_WIDTH,
+  //                          ExpectedVal2, RECT_WIDTH, RECT_HEIGHT,
+  //                          {FirstFillEvent, DstMemsetEvent})
+  //        .wait();
+  //    std::vector<T> Results;
+  //    Results.resize(DST_ELEMS);
+  //    copy_to_host<AllocKind>(Q, USMMemDst, Results.data(), DST_ELEMS).wait();
+  //
+  //    for (size_t I = 0; I < DST_ELEMS; ++I) {
+  //      T ExpectedVal = I >= (DST_ELEMS / 2) ? ExpectedVal2 : ExpectedVal1;
+  //      if (!checkResult<AllocKind, PathKind>(Results[I], ExpectedVal, I,
+  //                                            "Test 2")) {
+  //        ++Failures;
+  //        break;
+  //      }
+  //    }
+  //
+  //    free<AllocKind>(USMMemDst, Q);
+  //  }
+  //
+  //  // Test 3 - 2D fill horizontally adjacent regions.
+  //  {
+  //    constexpr size_t DST_ELEMS = 2 * RECT_WIDTH * RECT_HEIGHT;
+  //
+  //    T *USMMemDst = allocate<T, AllocKind>(DST_ELEMS, Q);
+  //    event DstMemsetEvent =
+  //        memset<AllocKind>(Q, USMMemDst, 0, DST_ELEMS * sizeof(T));
+  //    event FirstFillEvent =
+  //        doFill2D<T, PathKind>(Q, USMMemDst, 2 * RECT_WIDTH, ExpectedVal1,
+  //                              RECT_WIDTH, RECT_HEIGHT, {DstMemsetEvent});
+  //    doFill2D<T, PathKind>(Q, USMMemDst + RECT_WIDTH, 2 * RECT_WIDTH,
+  //                          ExpectedVal2, RECT_WIDTH, RECT_HEIGHT,
+  //                          {FirstFillEvent, DstMemsetEvent})
+  //        .wait();
+  //    std::vector<T> Results;
+  //    Results.resize(DST_ELEMS);
+  //    copy_to_host<AllocKind>(Q, USMMemDst, Results.data(), DST_ELEMS).wait();
+  //
+  //    for (size_t I = 0; I < DST_ELEMS; ++I) {
+  //      T ExpectedVal = (I / RECT_WIDTH) % 2 ? ExpectedVal2 : ExpectedVal1;
+  //      if (!checkResult<AllocKind, PathKind>(Results[I], ExpectedVal, I,
+  //                                            "Test 3")) {
+  //        ++Failures;
+  //        break;
+  //      }
+  //    }
+  //
+  //    free<AllocKind>(USMMemDst, Q);
+  //  }
+  //
+  //  // Test 4 - 2D fill 2x2 grid of rectangles.
+  //  {
+  //    constexpr size_t DST_ELEMS = 4 * RECT_WIDTH * RECT_HEIGHT;
+  //
+  //    T *USMMemDst = allocate<T, AllocKind>(DST_ELEMS, Q);
+  //    event DstMemsetEvent =
+  //        memset<AllocKind>(Q, USMMemDst, 0, DST_ELEMS * sizeof(T));
+  //    // Top left rectangle.
+  //    event FirstFillEvent =
+  //        doFill2D<T, PathKind>(Q, USMMemDst, 2 * RECT_WIDTH, ExpectedVal1,
+  //                              RECT_WIDTH, RECT_HEIGHT, {DstMemsetEvent});
+  //    // Top right rectangle.
+  //    event SecondFillEvent = doFill2D<T, PathKind>(
+  //        Q, USMMemDst + RECT_WIDTH, 2 * RECT_WIDTH, ExpectedVal2, RECT_WIDTH,
+  //        RECT_HEIGHT, {FirstFillEvent, DstMemsetEvent});
+  //    // Bottom left rectangle.
+  //    event ThirdFillEvent = doFill2D<T, PathKind>(
+  //        Q, USMMemDst + DST_ELEMS / 2, 2 * RECT_WIDTH, ExpectedVal2,
+  //        RECT_WIDTH, RECT_HEIGHT, {FirstFillEvent, SecondFillEvent,
+  //        DstMemsetEvent});
+  //    // Bottom right rectangle.
+  //    doFill2D<T, PathKind>(
+  //        Q, USMMemDst + DST_ELEMS / 2 + RECT_WIDTH, 2 * RECT_WIDTH,
+  //        ExpectedVal1, RECT_WIDTH, RECT_HEIGHT, {FirstFillEvent,
+  //        SecondFillEvent, ThirdFillEvent, DstMemsetEvent}) .wait();
+  //    std::vector<T> Results;
+  //    Results.resize(DST_ELEMS);
+  //    copy_to_host<AllocKind>(Q, USMMemDst, Results.data(), DST_ELEMS).wait();
+  //
+  //    for (size_t I = 0; I < DST_ELEMS; ++I) {
+  //      T ExpectedVal = ((I / RECT_WIDTH) + (I / (DST_ELEMS / 2))) % 2
+  //                          ? ExpectedVal2
+  //                          : ExpectedVal1;
+  //      if (!checkResult<AllocKind, PathKind>(Results[I], ExpectedVal, I,
+  //                                            "Test 4")) {
+  //        ++Failures;
+  //        break;
+  //      }
+  //    }
+  //
+  //    free<AllocKind>(USMMemDst, Q);
+  //  }
+
+  return Failures;
+}
+
+template <typename T, Alloc AllocKind, OperationPath PathKind>
+int test_validate(queue &Q, T ExpectedVal1, T ExpectedVal2) {
+  constexpr size_t RECT_WIDTH = 50;
+  constexpr size_t RECT_HEIGHT = 21;
+
   int Failures = 0;
 
   // Test 1 - 2D fill entire buffer.
@@ -174,15 +329,26 @@ int test(queue &Q, T ExpectedVal1, T ExpectedVal2) {
   return Failures;
 }
 
+template <typename T, Alloc AllocKind, OperationPath PathKind>
+int test(queue &Q, T ExpectedVal1, T ExpectedVal2, bool bench) {
+  if (bench) {
+    return test_bench<T, AllocKind, PathKind>(Q, ExpectedVal1, ExpectedVal2);
+  }
+  else {
+    return test_validate<T, AllocKind, PathKind>(Q, ExpectedVal1, ExpectedVal2);
+  }
+}
+
 template <typename T, Alloc AllocKind>
 int testForAllPaths(queue &Q, T ExpectedVal1, T ExpectedVal2) {
+  bool bench = true;
   int Failures = 0;
   Failures += test<T, AllocKind, OperationPath::Expanded>(Q, ExpectedVal1,
-                                                          ExpectedVal2);
+                                                          ExpectedVal2, bench);
   Failures += test<T, AllocKind, OperationPath::ExpandedDependsOn>(
-      Q, ExpectedVal1, ExpectedVal2);
+      Q, ExpectedVal1, ExpectedVal2, bench);
   Failures += test<T, AllocKind, OperationPath::ShortcutEventList>(
-      Q, ExpectedVal1, ExpectedVal2);
+      Q, ExpectedVal1, ExpectedVal2, bench);
   return Failures;
 }
 
@@ -194,18 +360,30 @@ template <Alloc AllocKind> int testForAllTypesAndPaths(queue &Q) {
   TestStruct TestStructRef1{42, 'f'}, TestStructRef2{1234, 'd'};
 
   int Failures = 0;
+  std::cout << "Char ";
   Failures += testForAllPaths<char, AllocKind>(Q, 'f', 'd');
+  std::cout << "Short ";
   Failures += testForAllPaths<short, AllocKind>(Q, 1234, 42);
+  std::cout << "Int ";
   Failures += testForAllPaths<int, AllocKind>(Q, 42, 1234);
+  std::cout << "Long ";
   Failures += testForAllPaths<long, AllocKind>(Q, 1242, 34);
+  std::cout << "Long Long ";
   Failures += testForAllPaths<long long, AllocKind>(Q, 34, 1242);
-  if (SupportsHalf)
+  if (SupportsHalf) {
+    std::cout << "Half ";
     Failures += testForAllPaths<sycl::half, AllocKind>(Q, 12.34f, 42.24f);
+  }
+  std::cout << "Float ";
   Failures += testForAllPaths<float, AllocKind>(Q, 42.24f, 12.34f);
-  if (SupportsDouble)
+  if (SupportsDouble) {
+    std::cout << "Double ";
     Failures += testForAllPaths<double, AllocKind>(Q, 42.34, 12.24);
+  }
   Failures +=
-      testForAllPaths<TestStruct, AllocKind>(Q, TestStructRef1, TestStructRef2);
+      testForAllPaths<TestStruct, AllocKind>(Q, TestStructRef1,
+      TestStructRef2);
+
   return Failures;
 }
 
@@ -213,16 +391,23 @@ int main() {
   queue Q;
 
   int Failures = 0;
+  std::cout << "Alloc Direct Host" << std::endl;
   Failures += testForAllTypesAndPaths<Alloc::DirectHost>(Q);
-  if (Q.get_device().has(aspect::usm_device_allocations))
+  if (Q.get_device().has(aspect::usm_device_allocations)) {
+    std::cout << "\nAlloc Device" << std::endl;
     Failures += testForAllTypesAndPaths<Alloc::Device>(Q);
-  if (Q.get_device().has(aspect::usm_host_allocations))
+  }
+  if (Q.get_device().has(aspect::usm_host_allocations)) {
+    std::cout << "\nAlloc Host" << std::endl;
     Failures += testForAllTypesAndPaths<Alloc::Host>(Q);
-  if (Q.get_device().has(aspect::usm_shared_allocations))
+  }
+  if (Q.get_device().has(aspect::usm_shared_allocations)) {
+    std::cout << "\nAlloc Shared" << std::endl;
     Failures += testForAllTypesAndPaths<Alloc::Shared>(Q);
+  }
 
-  if (!Failures)
-    std::cout << "Passed!" << std::endl;
+    if (!Failures)
+      std::cout << "Passed!" << std::endl;
 
   return Failures;
 }

@@ -1170,8 +1170,8 @@ void MemoryManager::fill_2d_usm(
     OutEventImpl->setHostEnqueueTime();
   const PluginPtr &Plugin = Queue->getPlugin();
   Plugin->call<PiApiKind::piextUSMEnqueueFill2D>(
-      Queue->getHandleRef(), DstMem, Pitch, Pattern.size(), Pattern.data(),
-      Width, Height, DepEvents.size(), DepEvents.data(), OutEvent);
+      Queue->getHandleRef(), DstMem, Pitch * Pattern.size(), Pattern.size(), Pattern.data(),
+      Width * Pattern.size(), Height, DepEvents.size(), DepEvents.data(), OutEvent);
 }
 
 // TODO: This function will remain until ABI-breaking change
