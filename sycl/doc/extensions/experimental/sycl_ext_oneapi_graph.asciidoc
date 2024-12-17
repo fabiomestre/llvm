@@ -9,6 +9,7 @@
 :encoding: utf-8
 :lang: en
 :sectnums:
+:sectnumlevels: 4
 :dpcpp: pass:[DPC++]
 
 :blank: pass:[ +]
@@ -472,6 +473,53 @@ Exceptions:
 
 ==== Dynamic Parameters
 
+Dynamic parameters are arguments to a node's command-group which can be updated
+by the user after the node has been added to a graph. Updating the value of a
+dynamic parameter will be reflected in the modifiable graph which contains this
+node. These updated nodes can then be passed to an executable graph to update
+it with new values. See <<executable-graph-update, Executable Graph Update>>
+for more information about updating node parameters.
+
+Dynamic parameters are registered with nodes in a modifiable graph, with each
+registration associating one or more node arguments to the dynamic parameter
+instance. Registration happens inside the command-group that the node
+represents, and is done when dynamic parameters are set as parameters to the
+kernel using `handler::set_arg()`/`handler::set_args()`. It is valid for a node
+argument to be registered with more than one dynamic parameter instance.
+
+There are multiple classes that can be used to register a kernel node argument
+as a dynamic parameter. Every class provides an `update()` method which
+can be used to update the kernel argument associated with that instance. All classes
+also provide the {crs}[common reference semantics]. The choice of which class
+to use, depends on the kernel argument types that need to be updated:
+
+- <<dynamic-parameter-class, dynamic_parameter class>>: used to update pointers
+to a USM allocation, scalars passed by value, or instances of `raw_kernel_arg`
+(as defined in the 
+link:../experimental/sycl_ext_oneapi_raw_kernel_arg.asciidoc[sycl_ext_oneapi_raw_kernel_arg] extension).
+
+- <<dynamic-accessor-class, dynamic_accessor class>>: used to update `sycl::accessor`
+arguments.
+
+- <<dynamic-local-accessor-class, dynamic_local_accessor class>>: used to update
+`sycl::local_accessor` arguments.
+
+- <<dynamic-work-group-memory-class, dynamic_work_group_memory class>>: used to update
+`work_group_memory` arguments (as defined in the
+link:../experimental/sycl_ext_oneapi_work_group_memory.asciidoc[sycl_ext_oneapi_work_group_memory]
+extension).
+
+
+
+
+===== The dynamic_parameter class [[dynamic-parameter-class]]
+
+The type of the underlying object a dynamic parameter represents is set at
+compile time using a template parameter. This underlying type can be a pointer
+to a USM allocation, scalar passed by value, or a raw byte representation of the
+argument. The raw byte representation is intended to enable updating arguments set
+using link:../experimental/sycl_ext_oneapi_raw_kernel_arg.asciidoc[sycl_ext_oneapi_raw_kernel_arg].
+
 [source,c++]
 ----
 namespace ext::oneapi::experimental{
@@ -484,31 +532,6 @@ public:
 };
 }
 ----
-
-Dynamic parameters are arguments to a node's command-group which can be updated
-by the user after the node has been added to a graph. Updating the value of a
-dynamic parameter will be reflected in the modifiable graph which contains this
-node. These updated nodes can then be passed to an executable graph to update
-it with new values.
-
-The type of the underlying object a dynamic parameter represents is set at
-compile time using a template parameter. This underlying type can be an
-accessor, a pointer to a USM allocation, scalar passed by value, or a raw byte
-representation of the argument. The raw byte representation is intended to
-enable updating arguments set using
-link:../experimental/sycl_ext_oneapi_raw_kernel_arg.asciidoc[sycl_ext_oneapi_raw_kernel_arg].
-
-Dynamic parameters are registered with nodes in a modifiable graph, with each
-registration associating one or more node arguments to the dynamic parameter
-instance. Registration happens inside the command-group that the node
-represents, and is done when dynamic parameters are set as parameters to the
-kernel using `handler::set_arg()`/`handler::set_args()`. It is valid for a node
-argument to be registered with more than one dynamic parameter instance.
-
-See <<executable-graph-update, Executable Graph Update>> for more information
-about updating node parameters.
-
-The `dynamic_parameter` class provides the {crs}[common reference semantics].
 
 Table {counter: tableNumber}. Member functions of the `dynamic_parameter` class.
 [cols="2a,a"]
@@ -528,6 +551,136 @@ Parameters:
 
 * `graph` - Graph containing the nodes which will have dynamic parameters.
 * `initialValue` - Initial value of this parameter.
+
+|
+[source,c++]
+----
+void update(const ValueT& newValue);
+----
+
+|Updates parameters in all nodes registered with this dynamic parameter to
+`newValue`. This new value will be reflected immediately in the modifiable graph
+which contains the registered nodes. The new value will not be reflected in any
+executable graphs created from that modifiable graph until
+`command_graph::update()` is called passing the modified nodes, or a new
+executable graph is finalized from the modifiable graph.
+
+It is not an error if `newValue` is set to the current parameter value in any
+registered nodes.
+
+Parameters:
+
+* `newValue` - Value to update the registered node parameters to.
+
+|===
+
+===== The dynamic_accessor class [[dynamic-accessor-class]]
+
+Table {counter: tableNumber}. Member functions of the `dynamic_accessor` class.
+[cols="2a,a"]
+|===
+|Member Function|Description
+
+|
+[source,c++]
+----
+dynamic_accessor(command_graph<graph_state::modifiable> graph,
+                  buffer &initialValue);
+----
+|Constructs a dynamic accessor object that can be registered with command graph
+nodes with an initial value.
+
+Parameters:
+
+* `graph` - Graph containing the nodes which will have dynamic parameters.
+* `initialValue` - Initial value of this parameter.
+
+|
+[source,c++]
+----
+void update(const ValueT& newValue);
+----
+
+|Updates parameters in all nodes registered with this dynamic accessor to
+`newValue`. This new value will be reflected immediately in the modifiable graph
+which contains the registered nodes. The new value will not be reflected in any
+executable graphs created from that modifiable graph until
+`command_graph::update()` is called passing the modified nodes, or a new
+executable graph is finalized from the modifiable graph.
+
+It is not an error if `newValue` is set to the current parameter value in any
+registered nodes.
+
+Parameters:
+
+* `newValue` - Value to update the registered node parameters to.
+
+|===
+
+===== The dynamic_local_accessor class [[dynamic-local-accessor-class]]
+
+Table {counter: tableNumber}. Member functions of the `dynamic_local_accessor` class.
+[cols="2a,a"]
+|===
+|Member Function|Description
+
+|
+[source,c++]
+----
+template <typename DataT, int Dimensions = 1>
+dynamic_local_accessor(command_graph<graph_state::modifiable> graph, range<Dimensions> allocationSize);
+----
+|Constructs a dynamic local accessor object that can be registered with command graph
+nodes with an initial value.
+
+Parameters:
+
+* `graph` - Graph containing the nodes which will have dynamic parameters.
+* `allocationSize` - The size 
+
+|
+[source,c++]
+----
+void update(const buffer& newValue);
+----
+
+|Updates parameters in all nodes registered with this dynamic parameter to
+`newValue`. This new value will be reflected immediately in the modifiable graph
+which contains the registered nodes. The new value will not be reflected in any
+executable graphs created from that modifiable graph until
+`command_graph::update()` is called passing the modified nodes, or a new
+executable graph is finalized from the modifiable graph.
+
+It is not an error if `newValue` is set to the current parameter value in any
+registered nodes.
+
+Parameters:
+
+* `newValue` - Value to update the registered node parameters to.
+
+|===
+
+===== The dynamic_work_group_memory class [[dynamic-work-group-memory-class]]
+`
+
+Table {counter: tableNumber}. Member functions of the `dynamic_work_group_memory` class.
+[cols="2a,a"]
+|===
+|Member Function|Description
+
+|
+[source,c++]
+----
+dynamic_work_group_memory(command_graph<graph_state::modifiable> graph,
+                  const size_t &allocationSize);
+----
+|Constructs a dynamic parameter object that can be registered with command graph
+nodes with an initial value.
+
+Parameters:
+
+* `graph` - Graph containing the nodes which will have dynamic parameters.
+* `allocationSize` - The size.
 
 |
 [source,c++]

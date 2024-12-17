@@ -91,5 +91,7 @@ add_custom_target(check-sycl-e2e
   USES_TERMINAL
 )
 
+add_executable("local_memory_test" Graph/Explicit/compile_time_local_memory.cpp)
+
 add_subdirectory(External)
 add_subdirectory(ExtraTests)
