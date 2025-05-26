@@ -114,6 +114,11 @@ int main() {
       nd_range<2>{range<2>{Size, Size}, range<2>{NewLocalSize, NewLocalSize}});
   KernelNodeC.update_nd_range(nd_range<1>{Size * Size, NewLocalSize});
 
+//  Queue.ext_oneapi_graph(ExecGraph).wait();
+//  Queue.ext_oneapi_graph(ExecGraph).wait();
+//  Queue.ext_oneapi_graph(ExecGraph).wait();
+//  Queue.ext_oneapi_graph(ExecGraph).wait();
+
   ExecGraph.update(KernelNodeA);
   ExecGraph.update(KernelNodeB);
   ExecGraph.update(KernelNodeC);

@@ -755,9 +755,13 @@ event handler::finalize() {
           nullptr, impl->MExecGraph, std::move(impl->CGData)));
 
     } else {
-      event GraphCompletionEvent =
-          impl->MExecGraph->enqueue(MQueue, std::move(impl->CGData));
-      MLastEvent = GraphCompletionEvent;
+      bool DiscardEvent =
+          !impl->MEventNeeded && MQueue->supportsDiscardingPiEvents();
+      assert(impl->CGData.MAccStorage.size() == 0 && impl->CGData.MRequirements.size() == 0 && "Sanity Check"); //Sanity Check
+      std::optional<event> GraphCompletionEvent =
+          impl->MExecGraph->enqueue(MQueue, std::move(impl->CGData), !DiscardEvent);
+      // TODO Rebase on top of Igor and Slawomir PRs
+        MLastEvent = GraphCompletionEvent.value_or( sycl::detail::createSyclObjFromImpl<sycl::event>(std::make_shared<sycl::detail::event_impl>(MQueue)));
       return MLastEvent;
     }
   } break;

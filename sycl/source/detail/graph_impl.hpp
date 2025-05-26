@@ -772,15 +772,21 @@ public:
       MCommandBuffers;
   /// List of predecessors to this partition.
   std::vector<std::shared_ptr<partition>> MPredecessors;
+
+  /// List of successors to this partition.
+  std::vector<std::shared_ptr<partition>> MSuccessors;
+
   /// True if the graph of this partition is a single path graph
   /// and in-order optmization can be applied on it.
   bool MIsInOrderGraph = false;
 
-  /// @return True if the partition contains a host task
-  bool isHostTask() const {
-    return (MRoots.size() && ((*MRoots.begin()).lock()->MCGType ==
-                              sycl::detail::CGType::CodeplayHostTask));
-  }
+  /// True if this partition contains only one node which is a host_task.
+  bool MIsHostTask = false;
+
+  // Submission event for the partition. Used during enqueue to define
+  // dependencies between this partition and its successors. This event is
+  // replaced every time the partition is executed.
+  EventImplPtr MEvent;
 
   /// Checks if the graph is single path, i.e. each node has a single successor.
   /// @return True if the graph is a single path
@@ -1341,13 +1347,42 @@ public:
   /// host_task.
   void makePartitions();
 
+  /// TODO
+  /// @param Partition
+  /// @param Queue
+  /// @param CGData
+  /// @return
+  EventImplPtr enqueueHostTaskPartition(
+    std::shared_ptr<partition>& Partition, const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+    std::vector<detail::EventImplPtr> &WaitEvents);
+
+  /// Enqueue the command buffer using the scheduler.
+  /// @param EventNeeded Whether the signalling events for this operation should
+  /// be returned to the user.
+  std::optional<EventImplPtr> enqueuePartitionWithScheduler(
+      std::shared_ptr<partition> &Partition,
+      const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+      sycl::detail::CG::StorageInitHelper &CGData, bool EventNeeded);
+
+  /// Enqueue the command buffer without using the scheduler
+  /// @param EventNeeded Whether the signalling events for this operation should
+  /// be returned to the user.
+  std::optional<EventImplPtr> enqueuePartitionDirectly(
+      std::shared_ptr<partition> &Partition,
+      const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+      std::vector<detail::EventImplPtr> &WaitEvents, bool EventNeeded);
+
   /// Called by handler::ext_oneapi_command_graph() to schedule graph for
   /// execution.
   /// @param Queue Command-queue to schedule execution on.
   /// @param CGData Command-group data provided by the sycl::handler
-  /// @return Event associated with the execution of the graph.
-  sycl::event enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-                      sycl::detail::CG::StorageInitHelper CGData);
+  /// @param EventNeeded Whether an event signalling the completion of this
+  /// operation needs to be returned.
+  /// @return Returns an event if EventNeeded is true or if the last partition
+  /// of the graph is a host-task. Returns std::nullopt otherwise.
+  std::optional<sycl::event>
+  enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+          sycl::detail::CG::StorageInitHelper CGData, bool EventNeeded);
 
   /// Turns the internal graph representation into UR command-buffers for a
   /// device.
@@ -1355,7 +1390,7 @@ public:
   /// @param Partion Partition to which the created command-buffer should be
   /// attached.
   void createCommandBuffers(sycl::device Device,
-                            std::shared_ptr<partition> &Partition);
+                            std::shared_ptr<partition>& Partition);
 
   /// Query for the device tied to this graph.
   /// @return Device associated with graph.

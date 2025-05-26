@@ -281,6 +281,9 @@ void exec_graph_impl::makePartitions() {
         MPartitionNodes[Node] = PartitionFinalNum;
         if (isPartitionRoot(Node)) {
           Partition->MRoots.insert(Node);
+          if (Node->MCGType == CGType::CodeplayHostTask) {
+            Partition->MIsHostTask = true;
+          }
         }
       }
     }
@@ -309,8 +312,9 @@ void exec_graph_impl::makePartitions() {
       auto RootNode = Root.lock();
       for (const auto &Dep : RootNode->MPredecessors) {
         auto NodeDep = Dep.lock();
-        Partition->MPredecessors.push_back(
-            MPartitions[MPartitionNodes[NodeDep]]);
+        auto &Predecessor = MPartitions[MPartitionNodes[NodeDep]];
+        Partition->MPredecessors.push_back(Predecessor);
+        Predecessor->MSuccessors.push_back(Partition);
       }
     }
   }
@@ -1002,9 +1006,219 @@ exec_graph_impl::~exec_graph_impl() {
   }
 }
 
-sycl::event
+EventImplPtr exec_graph_impl::enqueueHostTaskPartition(
+    std::shared_ptr<partition> &Partition,
+    const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+    std::vector<detail::EventImplPtr> &WaitEvents) {
+
+  auto NodeImpl = Partition->MSchedule.front();
+
+  //FIXME is a deep copy of the command group really needed?
+  NodeImpl->MCommandGroup->getEvents().insert(
+      NodeImpl->MCommandGroup->getEvents().end(), WaitEvents.begin(),
+      WaitEvents.end());
+  // HostTask CG stores the Queue on which the task was submitted.
+  // In case of graph, this queue may differ from the actual execution
+  // queue. We therefore overload this Queue before submitting the task.
+  static_cast<sycl::detail::CGHostTask &>(*NodeImpl->MCommandGroup.get())
+      .MQueue = Queue;
+
+  return sycl::detail::Scheduler::getInstance().addCG(
+      NodeImpl->getCGCopy(), Queue, /*EventNeeded=*/true);
+}
+
+std::optional<EventImplPtr> exec_graph_impl::enqueuePartitionWithScheduler(
+    std::shared_ptr<partition> &Partition,
+    const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+    sycl::detail::CG::StorageInitHelper &CGData, bool EventNeeded) {
+
+  auto CommandBuffer = Partition->MCommandBuffers[Queue->get_device()];
+
+  std::unique_ptr<sycl::detail::CG> CommandGroup =
+      std::make_unique<sycl::detail::CGExecCommandBuffer>(
+          CommandBuffer, nullptr, CGData);
+
+  EventImplPtr SchedulerEvent = sycl::detail::Scheduler::getInstance().addCG(
+      std::move(CommandGroup), Queue, EventNeeded);
+
+  if (EventNeeded) {
+    SchedulerEvent->setEventFromSubmittedExecCommandBuffer(true);
+    return SchedulerEvent;
+  }
+
+  return std::nullopt;
+}
+
+std::optional<EventImplPtr> exec_graph_impl::enqueuePartitionDirectly(
+    std::shared_ptr<partition> &Partition,
+    const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+    std::vector<detail::EventImplPtr> &WaitEvents, bool EventNeeded) {
+
+  auto CheckURResult = [](ur_result_t UrResult) {
+    if (UrResult == UR_RESULT_ERROR_INVALID_QUEUE_PROPERTIES) {
+      throw sycl::exception(make_error_code(errc::invalid),
+                            "Graphs cannot be submitted to a queue which uses "
+                            "immediate command lists. Use "
+                            "sycl::ext::intel::property::queue::no_immediate_"
+                            "command_list to disable them.");
+    } else if (UrResult != UR_RESULT_SUCCESS) {
+      throw sycl::exception(
+          errc::event, "Failed to enqueue event for command buffer submission");
+    }
+  };
+
+  // FIXME Clean this up a bit
+  std::vector<ur_event_handle_t> UrWaitEvents{};
+  UrWaitEvents.reserve(WaitEvents.size());
+  for (auto &SyclWaitEvent : WaitEvents) {
+    assert(!SyclWaitEvent->isHost() || SyclWaitEvent->isCompleted());
+    assert(!SyclWaitEvent->isNOP() || SyclWaitEvent->isCompleted());
+    ur_event_handle_t URHandle = SyclWaitEvent->getHandle();
+    if (URHandle) {
+      UrWaitEvents.push_back(URHandle);
+    }
+  }
+  const ur_event_handle_t *PhEventWaitList = UrWaitEvents.size() > 0 ? UrWaitEvents.data() : nullptr;
+
+  auto CommandBuffer = Partition->MCommandBuffers[Queue->get_device()];
+  if (!EventNeeded) {
+    ur_result_t UrResult =
+        Queue->getAdapter()
+            ->call_nocheck<sycl::detail::UrApiKind::urEnqueueCommandBufferExp>(
+                Queue->getHandleRef(), CommandBuffer, UrWaitEvents.size(), PhEventWaitList, nullptr);
+    CheckURResult(UrResult);
+    return std::nullopt;
+  } else {
+    auto NewEvent = std::make_shared<sycl::detail::event_impl>(Queue);
+    NewEvent->setContextImpl(Queue->getContextImplPtr());
+    NewEvent->setStateIncomplete();
+    NewEvent->setSubmissionTime();
+    ur_event_handle_t UrEvent = nullptr;
+    ur_result_t UrResult =
+        Queue->getAdapter()
+            ->call_nocheck<sycl::detail::UrApiKind::urEnqueueCommandBufferExp>(
+                Queue->getHandleRef(), CommandBuffer, UrWaitEvents.size(), PhEventWaitList, &UrEvent);
+    CheckURResult(UrResult);
+    NewEvent->setHandle(UrEvent);
+    NewEvent->setEventFromSubmittedExecCommandBuffer(true);
+    return NewEvent;
+  }
+}
+
+static void cleanupExecutionEvents(std::vector<EventImplPtr>& ExecutionEvents) {
+  // Clean up any execution events which have finished so we don't pass them
+  // to the scheduler.
+  for (auto It = ExecutionEvents.begin(); It != ExecutionEvents.end();) {
+    if ((*It)->isCompleted()) {
+      It = ExecutionEvents.erase(It);
+      continue;
+    }
+    ++It;
+  }
+}
+
+// FIXME Why can't CGData be passed by reference?
+// std::optional<sycl::event>
+// exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+//                          sycl::detail::CG::StorageInitHelper CGData,
+//                          bool EventNeeded) {
+//   WriteLock Lock(MMutex);
+//
+//   //FIXME Remove execution events concept. This should always be an update event?
+//   cleanupExecutionEvents(MExecutionEvents);
+//   CGData.MEvents.insert(CGData.MEvents.end(), MExecutionEvents.begin(), MExecutionEvents.end());
+//
+//   bool AreEventsInCGDataSafeToBypassScheduler =
+//       detail::Scheduler::areEventsSafeForSchedulerBypass(
+//           CGData.MEvents, Queue->getContextImplPtr());
+//
+//   std::optional<EventImplPtr> SignalEvent;
+//   size_t MEventsSize = CGData.MEvents.size();
+//   bool RequirementsInserted = false;
+//   auto &LastPartition = MPartitions.back();
+//   auto &FirstPartition = MPartitions.front();
+//
+//   std::vector<EventImplPtr> SignalEventDependencies;
+//
+//   for (auto &Partition : MPartitions) {
+//
+//     const size_t ElementsToRemove = CGData.MEvents.size() - MEventsSize;
+//     CGData.MEvents.erase(CGData.MEvents.end() - ElementsToRemove,
+//                          CGData.MEvents.end());
+//
+//     for (auto& Predecessor: Partition->MPredecessors) {
+//       CGData.MEvents.push_back(Predecessor->MEvent);
+//     }
+//
+//     if (Partition->MIsHostTask) {
+//       SignalEvent = enqueueHostTaskPartition(Partition, Queue, CGData.MEvents);
+//       Partition->MEvent = SignalEvent.value();
+//       continue;
+//     }
+//
+//     bool IsFirstPartition = Partition == FirstPartition;
+//     bool IsLastPartition = Partition == LastPartition;
+//     /* FIXME Ideally the partition should have information about whether it
+//      * contains any requirements */
+//     bool SkipScheduler = MRequirements.empty() && IsFirstPartition /*FIXME Change condition to check predecessors */ &&
+//                          AreEventsInCGDataSafeToBypassScheduler;
+//     bool SkipSignalEvent = IsLastPartition && !EventNeeded;
+//
+//     if (SkipScheduler) {
+//       SignalEvent = enqueuePartitionDirectly(Partition, Queue, CGData.MEvents,
+//                                              !SkipSignalEvent);
+//     } else {
+//       if (!RequirementsInserted) {
+//         // FIXME If requirements were done per Partition, we could move this to
+//         // the enequeue instead.
+//         CGData.MRequirements.insert(CGData.MRequirements.end(),
+//                                     MRequirements.begin(), MRequirements.end());
+//         CGData.MAccStorage.insert(CGData.MAccStorage.end(), MAccessors.begin(),
+//                                   MAccessors.end());
+//         RequirementsInserted = true;
+//       }
+//
+//       SignalEvent = enqueuePartitionWithScheduler(Partition, Queue, CGData,
+//                                                   !SkipSignalEvent);
+//     }
+//
+//     if (!SkipSignalEvent /*FIXME No need to store event if it last partition? */) {
+//       Partition->MEvent = SignalEvent.value();
+//     }
+//
+//     //FIXME Clean all this confusing if conditions
+//     if (!SkipSignalEvent && !IsLastPartition && Partition->MSuccessors.empty()) {
+//       SignalEventDependencies.push_back(SignalEvent.value());
+//     }
+//   }
+//
+//   for (auto& EventFromOtherPartitions: SignalEventDependencies) {
+//     SignalEvent.value()->attachEventToComplete(EventFromOtherPartitions);
+//   }
+//
+//   //FIXME Remove executionEvents concept and use this only for updating
+//   if (SignalEvent.has_value()) {
+//     MExecutionEvents.push_back(SignalEvent.value());
+//   }
+//
+//   //TODO Handle profiling
+//   // NewEvent->setProfilingEnabled(MEnableProfiling);
+//
+//   // FIXME Does it really have to be a queueEvent that is returned here?
+//   std::optional<sycl::event> QueueEvent =
+//       SignalEvent.has_value()
+//           ? std::optional<sycl::event>(
+//                 sycl::detail::createSyclObjFromImpl<sycl::event>(
+//                     SignalEvent.value()))
+//           : std::optional<sycl::event>(std::nullopt);
+//
+//   return QueueEvent;
+// }
+
+/* FIXME OLD VERSION */
+std::optional<sycl::event>
 exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-                         sycl::detail::CG::StorageInitHelper CGData) {
+                         sycl::detail::CG::StorageInitHelper CGData, bool EventNeeded) {
   WriteLock Lock(MMutex);
 
   // Map of the partitions to their execution events
@@ -1026,7 +1240,8 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
   for (uint32_t currentPartitionsNum = 0;
        currentPartitionsNum < MPartitions.size(); currentPartitionsNum++) {
     auto CurrentPartition = MPartitions[currentPartitionsNum];
-    // restore initial MEvents to add only needed additional depenencies
+// FIXME Could be needed but not sure. Not adding yet
+    // restore initial MEvents to add only needed additional dependencies
     if (currentPartitionsNum > 0) {
       CGData.MEvents = BackupCGDataMEvents;
     }
@@ -1034,10 +1249,12 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
     for (auto const &DepPartition : CurrentPartition->MPredecessors) {
       CGData.MEvents.push_back(PartitionsExecutionEvents[DepPartition]);
     }
+// FIXME End of could be needed
 
     auto CommandBuffer = CurrentPartition->MCommandBuffers[Queue->get_device()];
 
     if (CommandBuffer) {
+// FIXME Could be needed but not sure. Not adding yet
       for (std::vector<sycl::detail::EventImplPtr>::iterator It =
                MExecutionEvents.begin();
            It != MExecutionEvents.end();) {
@@ -1058,8 +1275,9 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
           It = MExecutionEvents.erase(It);
         }
       }
+// FIXME End of could be needed
 
-      NewEvent = CreateNewEvent();
+     NewEvent = CreateNewEvent();
       ur_event_handle_t UREvent = nullptr;
       // Merge requirements from the nodes into requirements (if any) from the
       // handler.
@@ -1096,7 +1314,7 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
                 CommandBuffer, nullptr, std::move(CGData));
 
         NewEvent = sycl::detail::Scheduler::getInstance().addCG(
-            std::move(CommandGroup), Queue, /*EventNeeded=*/true);
+            std::move(CommandGroup), Queue, true);
       }
       NewEvent->setEventFromSubmittedExecCommandBuffer(true);
     } else if ((CurrentPartition->MSchedule.size() > 0) &&
@@ -1115,11 +1333,14 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
           .MQueue = Queue;
 
       NewEvent = sycl::detail::Scheduler::getInstance().addCG(
-          NodeImpl->getCGCopy(), Queue, /*EventNeeded=*/true);
+          NodeImpl->getCGCopy(), Queue, true);
     }
+// FIXME Could be needed but not sure. Not adding yet
     PartitionsExecutionEvents[CurrentPartition] = NewEvent;
+// FIXME End of could be needed
   }
 
+// FIXME Could be needed but not sure. Not adding yet
   // Keep track of this execution event so we can make sure it's completed in
   // the destructor.
   MExecutionEvents.push_back(NewEvent);
@@ -1130,11 +1351,155 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
       NewEvent->attachEventToComplete(Elem.second);
     }
   }
+// FIXME End of could be needed
   NewEvent->setProfilingEnabled(MEnableProfiling);
   sycl::event QueueEvent =
       sycl::detail::createSyclObjFromImpl<sycl::event>(NewEvent);
   return QueueEvent;
 }
+
+/* FIXME OLD VERSION */
+// std::optional<sycl::event>
+// exec_graph_impl::enqueueOld(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+//                          sycl::detail::CG::StorageInitHelper CGData, bool EventNeeded) {
+  // WriteLock Lock(MMutex);
+
+  // Map of the partitions to their execution events
+  // std::unordered_map<std::shared_ptr<partition>, sycl::detail::EventImplPtr>
+  //     PartitionsExecutionEvents;
+
+  /*auto CreateNewEvent([&]() {
+    auto NewEvent = std::make_shared<sycl::detail::event_impl>(Queue);
+    NewEvent->setContextImpl(Queue->getContextImplPtr());
+    NewEvent->setStateIncomplete();
+    return NewEvent;
+  });*/
+
+  // sycl::detail::EventImplPtr NewEvent;
+  // std::vector<sycl::detail::EventImplPtr> BackupCGDataMEvents;
+  // if (MPartitions.size() > 1) {
+  //   BackupCGDataMEvents = CGData.MEvents;
+  // }
+  // for (uint32_t currentPartitionsNum = 0;
+  //      currentPartitionsNum < MPartitions.size(); currentPartitionsNum++) {
+  //   auto CurrentPartition = MPartitions[currentPartitionsNum];
+// FIXME Could be needed but not sure. Not adding yet
+    // // restore initial MEvents to add only needed additional dependencies
+    // if (currentPartitionsNum > 0) {
+    //   CGData.MEvents = BackupCGDataMEvents;
+    // }
+
+    // for (auto const &DepPartition : CurrentPartition->MPredecessors) {
+    //   CGData.MEvents.push_back(PartitionsExecutionEvents[DepPartition]);
+    // }
+// FIXME End of could be needed
+
+    // auto CommandBuffer = CurrentPartition->MCommandBuffers[Queue->get_device()];
+
+    // if (CommandBuffer) {
+// FIXME Could be needed but not sure. Not adding yet
+      // for (std::vector<sycl::detail::EventImplPtr>::iterator It =
+      //          MExecutionEvents.begin();
+      //      It != MExecutionEvents.end();) {
+      //   EventImplPtr &Event = *It;
+      //   if (!Event->isCompleted()) {
+      //     const std::vector<EventImplPtr> &AttachedEventsList =
+      //         Event->getPostCompleteEvents();
+      //     CGData.MEvents.reserve(CGData.MEvents.size() +
+      //                            AttachedEventsList.size() + 1);
+      //     CGData.MEvents.push_back(Event);
+      //     // Add events of the previous execution of all graph partitions.
+      //     CGData.MEvents.insert(CGData.MEvents.end(),
+      //                           AttachedEventsList.begin(),
+      //                           AttachedEventsList.end());
+      //     ++It;
+      //   } else {
+      //     // Remove completed events
+      //     It = MExecutionEvents.erase(It);
+      //   }
+      // }
+// FIXME End of could be needed
+
+     /* NewEvent = CreateNewEvent();
+      ur_event_handle_t UREvent = nullptr;*/
+      // Merge requirements from the nodes into requirements (if any) from the
+      // handler.
+      /*CGData.MRequirements.insert(CGData.MRequirements.end(),
+                                  MRequirements.begin(), MRequirements.end());
+      CGData.MAccStorage.insert(CGData.MAccStorage.end(), MAccessors.begin(),
+                                MAccessors.end());*/
+
+      // If we have no requirements or dependent events for the command buffer,
+      // enqueue it directly
+      /*if (CGData.MRequirements.empty() && CGData.MEvents.empty()) {
+        NewEvent->setSubmissionTime();
+        ur_result_t Res =
+            Queue->getAdapter()
+                ->call_nocheck<
+                    sycl::detail::UrApiKind::urEnqueueCommandBufferExp>(
+                    Queue->getHandleRef(), CommandBuffer, 0, nullptr, &UREvent);
+        NewEvent->setHandle(UREvent);
+        if (Res == UR_RESULT_ERROR_INVALID_QUEUE_PROPERTIES) {
+          throw sycl::exception(
+              make_error_code(errc::invalid),
+              "Graphs cannot be submitted to a queue which uses "
+              "immediate command lists. Use "
+              "sycl::ext::intel::property::queue::no_immediate_"
+              "command_list to disable them.");
+        } else if (Res != UR_RESULT_SUCCESS) {
+          throw sycl::exception(
+              errc::event,
+              "Failed to enqueue event for command buffer submission");
+        }
+      } *//*else {
+        std::unique_ptr<sycl::detail::CG> CommandGroup =
+            std::make_unique<sycl::detail::CGExecCommandBuffer>(
+                CommandBuffer, nullptr, std::move(CGData));
+
+        NewEvent = sycl::detail::Scheduler::getInstance().addCG(
+            std::move(CommandGroup), Queue, true);
+      } */
+    /*  NewEvent->setEventFromSubmittedExecCommandBuffer(true);
+    } else if ((CurrentPartition->MSchedule.size() > 0) &&
+               (CurrentPartition->MSchedule.front()->MCGType ==
+                sycl::detail::CGType::CodeplayHostTask)) {
+
+      auto NodeImpl = CurrentPartition->MSchedule.front();
+      // Schedule host task
+      NodeImpl->MCommandGroup->getEvents().insert(
+          NodeImpl->MCommandGroup->getEvents().end(), CGData.MEvents.begin(),
+          CGData.MEvents.end());
+      // HostTask CG stores the Queue on which the task was submitted.
+      // In case of graph, this queue may differ from the actual execution
+      // queue. We therefore overload this Queue before submitting the task.
+      static_cast<sycl::detail::CGHostTask &>(*NodeImpl->MCommandGroup.get())
+          .MQueue = Queue;
+
+      NewEvent = sycl::detail::Scheduler::getInstance().addCG(
+          NodeImpl->getCGCopy(), Queue, true);
+    } */
+// FIXME Could be needed but not sure. Not adding yet
+    // PartitionsExecutionEvents[CurrentPartition] = NewEvent;
+// FIXME End of could be needed
+  // }
+
+// FIXME Could be needed but not sure. Not adding yet
+  // // Keep track of this execution event so we can make sure it's completed in
+  // // the destructor.
+  // MExecutionEvents.push_back(NewEvent);
+  // // Attach events of previous partitions to ensure that when the returned event
+  // // is complete all execution associated with the graph have been completed.
+  // for (auto const &Elem : PartitionsExecutionEvents) {
+  //   if (Elem.second != NewEvent) {
+  //     NewEvent->attachEventToComplete(Elem.second);
+  //   }
+  // }
+// FIXME End of could be needed
+  // NewEvent->setProfilingEnabled(MEnableProfiling);
+  /*sycl::event QueueEvent =
+      sycl::detail::createSyclObjFromImpl<sycl::event>(NewEvent);
+  return QueueEvent;*/
+// }
 
 void exec_graph_impl::duplicateNodes() {
   // Map of original modifiable nodes (keys) to new duplicated nodes (values)
@@ -1382,15 +1747,7 @@ void exec_graph_impl::update(
   std::vector<sycl::detail::AccessorImplHost *> UpdateRequirements;
   bool NeedScheduledUpdate = needsScheduledUpdate(Nodes, UpdateRequirements);
   if (NeedScheduledUpdate) {
-    // Clean up any execution events which have finished so we don't pass them
-    // to the scheduler.
-    for (auto It = MExecutionEvents.begin(); It != MExecutionEvents.end();) {
-      if ((*It)->isCompleted()) {
-        It = MExecutionEvents.erase(It);
-        continue;
-      }
-      ++It;
-    }
+    cleanupExecutionEvents(MExecutionEvents);
 
     // Track the event for the update command since execution may be blocked by
     // other scheduler commands
@@ -1987,7 +2344,7 @@ void executable_command_graph::finalizeImpl() {
 
   auto Device = impl->getGraphImpl()->getDevice();
   for (auto Partition : impl->getPartitions()) {
-    if (!Partition->isHostTask()) {
+    if (!Partition->MIsHostTask) {
       impl->createCommandBuffers(Device, Partition);
     }
   }
