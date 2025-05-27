@@ -19,7 +19,7 @@ int main() {
   std::iota(DataC.begin(), DataC.end(), 1000);
 
   std::vector<T> Reference(DataC);
-  for (unsigned n = 0; n < Iterations; n++) {
+  for (unsigned n = 0; n < Iterations + 25; n++) {
     for (size_t i = 0; i < Size; i++) {
       Reference[i] += (DataA[i] + DataB[i]) + ModValue + 1;
     }
@@ -102,7 +102,7 @@ int main() {
 
   auto GraphExec = Graph.finalize();
 
-  for (unsigned n = 0; n < Iterations; n++) {
+  for (unsigned n = 0; n < Iterations + 25; n++) {
     Queue.submit([&](handler &CGH) { CGH.ext_oneapi_graph(GraphExec); });
   }
   Queue.wait_and_throw();

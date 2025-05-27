@@ -1372,6 +1372,11 @@ public:
       const std::shared_ptr<sycl::detail::queue_impl> &Queue,
       std::vector<detail::EventImplPtr> &WaitEvents, bool EventNeeded);
 
+  std::optional<sycl::event>
+enqueuePartitions(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+                         sycl::detail::CG::StorageInitHelper& CGData,
+                         bool EventNeeded);
+
   /// Called by handler::ext_oneapi_command_graph() to schedule graph for
   /// execution.
   /// @param Queue Command-queue to schedule execution on.
@@ -1422,7 +1427,7 @@ public:
   /// @return true if all previous submissions have been completed, false
   /// otherwise.
   bool previousSubmissionCompleted() const {
-    for (auto Event : MExecutionEvents) {
+    for (auto Event : MSchedulerDependencies) {
       if (!Event->isCompleted()) {
         return false;
       }
@@ -1594,8 +1599,9 @@ private:
   /// Storage for accessors which are used by this graph, accumulated from
   /// all nodes enqueued to the graph.
   std::vector<sycl::detail::AccessorImplPtr> MAccessors;
-  /// List of all execution events returned from command buffer enqueue calls.
-  std::vector<sycl::detail::EventImplPtr> MExecutionEvents;
+  /// List of dependencies that enqueue or update commands need to wait on
+  /// when using the scheduler path.
+  std::vector<sycl::detail::EventImplPtr> MSchedulerDependencies;
   /// List of the partitions that compose the exec graph.
   std::vector<std::shared_ptr<partition>> MPartitions;
   /// Storage for copies of nodes from the original modifiable graph.

@@ -1448,7 +1448,7 @@ ur_result_t getZeCommandQueue(ur_queue_handle_t Queue, bool UseCopyEngine,
  * @return UR_RESULT_SUCCESS or an error code on failure
  */
 ur_result_t
-waitForOngoingExecution(ur_exp_command_buffer_handle_t CommandBuffer) {
+ waitForOngoingExecution(ur_exp_command_buffer_handle_t CommandBuffer) {
 
   if (ur_event_handle_t &CurrentSubmissionEvent =
           CommandBuffer->CurrentSubmissionEvent) {

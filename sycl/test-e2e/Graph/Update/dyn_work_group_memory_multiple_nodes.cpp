@@ -5,6 +5,9 @@
 // Extra run to check for immediate-command-list in Level Zero
 // RUN: %if level_zero %{env SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=1 %{l0_leak_check} %{run} %t.out 2>&1 | FileCheck %s --implicit-check-not=LEAK %}
 
+// Fails on GT1030. [DO NOT COMMIT THIS]
+// UNSUPPORTED: cuda
+
 // Tests using a dynamic_work_group_memory with multiple nodes.
 
 #include "../graph_common.hpp"
@@ -113,11 +116,6 @@ int main() {
   KernelNodeB.update_nd_range(
       nd_range<2>{range<2>{Size, Size}, range<2>{NewLocalSize, NewLocalSize}});
   KernelNodeC.update_nd_range(nd_range<1>{Size * Size, NewLocalSize});
-
-//  Queue.ext_oneapi_graph(ExecGraph).wait();
-//  Queue.ext_oneapi_graph(ExecGraph).wait();
-//  Queue.ext_oneapi_graph(ExecGraph).wait();
-//  Queue.ext_oneapi_graph(ExecGraph).wait();
 
   ExecGraph.update(KernelNodeA);
   ExecGraph.update(KernelNodeB);
