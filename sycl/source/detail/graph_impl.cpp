@@ -1068,13 +1068,7 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitionDirectly(
     std::vector<detail::EventImplPtr> &WaitEvents, bool EventNeeded) {
 
   auto CheckURResult = [](ur_result_t UrResult) {
-    if (UrResult == UR_RESULT_ERROR_INVALID_QUEUE_PROPERTIES) {
-      throw sycl::exception(make_error_code(errc::invalid),
-                            "Graphs cannot be submitted to a queue which uses "
-                            "immediate command lists. Use "
-                            "sycl::ext::intel::property::queue::no_immediate_"
-                            "command_list to disable them.");
-    } else if (UrResult != UR_RESULT_SUCCESS) {
+    if (UrResult != UR_RESULT_SUCCESS) {
       throw sycl::exception(
           errc::event, "Failed to enqueue event for command buffer submission");
     }
@@ -1091,14 +1085,16 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitionDirectly(
       UrWaitEvents.push_back(URHandle);
     }
   }
-  const ur_event_handle_t *PhEventWaitList = UrWaitEvents.size() > 0 ? UrWaitEvents.data() : nullptr;
+  const ur_event_handle_t *PhEventWaitList =
+      UrWaitEvents.size() > 0 ? UrWaitEvents.data() : nullptr;
 
   auto CommandBuffer = Partition->MCommandBuffers[Queue->get_device()];
   if (!EventNeeded) {
     ur_result_t UrResult =
         Queue->getAdapter()
             ->call_nocheck<sycl::detail::UrApiKind::urEnqueueCommandBufferExp>(
-                Queue->getHandleRef(), CommandBuffer, UrWaitEvents.size(), PhEventWaitList, nullptr);
+                Queue->getHandleRef(), CommandBuffer, UrWaitEvents.size(),
+                PhEventWaitList, nullptr);
     CheckURResult(UrResult);
     return std::nullopt;
   } else {
@@ -1110,7 +1106,8 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitionDirectly(
     ur_result_t UrResult =
         Queue->getAdapter()
             ->call_nocheck<sycl::detail::UrApiKind::urEnqueueCommandBufferExp>(
-                Queue->getHandleRef(), CommandBuffer, UrWaitEvents.size(), PhEventWaitList, &UrEvent);
+                Queue->getHandleRef(), CommandBuffer, UrWaitEvents.size(),
+                PhEventWaitList, &UrEvent);
     CheckURResult(UrResult);
     NewEvent->setHandle(UrEvent);
     NewEvent->setEventFromSubmittedExecCommandBuffer(true);
@@ -1123,11 +1120,23 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitions(
     sycl::detail::CG::StorageInitHelper &CGData,
     bool IsCGDataSafeForSchedulerBypass, bool EventNeeded) {
 
-  std::vector<EventImplPtr *> SignalEventDependencies;
+  // If EventNeeded is true, this vector is used to keep track of dependencies
+  // for the returned event. This is used when the graph has multiple end nodes
+  // which cannot be tracked with a single scheduler event.
+  std::vector<EventImplPtr> PostCompleteDependencies;
+
+  // This variable represents the returned event. It will only contain a value
+  // if EventNeeded is true or if the last partition of the graph is a
+  // host-task.
   std::optional<EventImplPtr> SignalEvent;
+
   size_t NumEventsBeforePush = CGData.MEvents.size();
   for (auto &Partition : MPartitions) {
 
+    // Partitions can have multiple dependencies from previously executed
+    // partitions. To enforce this ordering, we need to add these dependencies
+    // to CGData. The added dependencies are then removed from CGData on the
+    // next iteration.
     const size_t ElementsToRemove = CGData.MEvents.size() - NumEventsBeforePush;
     CGData.MEvents.erase(CGData.MEvents.end() - ElementsToRemove,
                          CGData.MEvents.end());
@@ -1136,42 +1145,63 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitions(
       CGData.MEvents.push_back(Predecessor->MEvent);
     }
 
-    std::optional<EventImplPtr> TempEvent;
     bool IsLastPartition = (Partition == MPartitions.back());
+    std::optional<EventImplPtr> EnqueueEvent;
 
     if (Partition->MIsHostTask) {
-      TempEvent = enqueueHostTaskPartition(Partition, Queue, CGData.MEvents);
+      // The event returned by a host-task is always needed to synchronize with
+      // other partitions or to be used by the sycl queue as a dependency for
+      // further commands.
+      EnqueueEvent = enqueueHostTaskPartition(Partition, Queue, CGData.MEvents);
     } else {
-      bool RequestEvent = !IsLastPartition || EventNeeded || MIsUpdatable;
+      // We always need to request an event to use as dependency between
+      // partitions executions and between graph executions because the
+      // scheduler doesn't guarantee the execution order of host-tasks even when
+      // the queue is in-order.
+      constexpr bool RequestEvent = true;
+
+      // The scheduler can only be skipped if the partition is a root and is not
+      // a host-task. This is because all host-tasks need to go through the
+      // scheduler and, since only the scheduler can wait on host-task events,
+      // any subsequent partitions that depend on a host-task partition also
+      // need to use the scheduler.
       bool SkipScheduler =
           Partition->MPredecessors.empty() && IsCGDataSafeForSchedulerBypass;
       if (SkipScheduler) {
-        TempEvent = enqueuePartitionDirectly(Partition, Queue, CGData.MEvents,
-                                             RequestEvent);
+        EnqueueEvent = enqueuePartitionDirectly(Partition, Queue,
+                                                CGData.MEvents, RequestEvent);
       } else {
-        TempEvent = enqueuePartitionWithScheduler(Partition, Queue, CGData,
-                                                  RequestEvent);
+        EnqueueEvent = enqueuePartitionWithScheduler(Partition, Queue, CGData,
+                                                     RequestEvent);
       }
     }
 
-    if (MIsUpdatable && Partition->MSuccessors.empty()) {
-      MSchedulerDependencies.push_back(TempEvent.value());
-    }
-
-    if (!IsLastPartition) {
-      Partition->MEvent = std::move(TempEvent.value());
-
-      if (EventNeeded && Partition->MSuccessors.empty()) {
-        SignalEventDependencies.push_back(&Partition->MEvent);
+    if (!Partition->MSuccessors.empty()) {
+      // Need to keep track of the EnqueueEvent for this partition so that
+      // it can be added as a dependency to CGData when successors are executed.
+      Partition->MEvent = std::move(EnqueueEvent.value());
+    } else {
+      // Unified runtime guarantees the execution order of command-buffers.
+      // However, since host-tasks have been scheduled, we always need to add a
+      // dependency for the next graph execution. If we don't the next graph
+      // execution could end up with the same host-task node executing in
+      // parallel.
+      MSchedulerDependencies.push_back(EnqueueEvent.value());
+      if (!IsLastPartition && EventNeeded) {
+        // If it's not the last partition, keep track of the event as a post
+        // complete dependency.
+        PostCompleteDependencies.push_back(std::move(EnqueueEvent.value()));
+      } else if (IsLastPartition && (EventNeeded || Partition->MIsHostTask)) {
+        // If we are in the last partition copy the event to SignalEvent,
+        // so that it can be returned to the user.
+        SignalEvent = std::move(EnqueueEvent);
       }
-    } else if (EventNeeded || Partition->MIsHostTask) {
-      SignalEvent = std::move(TempEvent);
     }
   }
 
   if (EventNeeded) {
-    for (auto &EventFromOtherPartitions : SignalEventDependencies) {
-      SignalEvent.value()->attachEventToComplete(*EventFromOtherPartitions);
+    for (auto &EventFromOtherPartitions : PostCompleteDependencies) {
+      SignalEvent.value()->attachEventToComplete(EventFromOtherPartitions);
     }
   }
 
@@ -1201,30 +1231,39 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
           CGData.MEvents, Queue->getContextImplPtr()) &&
       CGData.MRequirements.empty();
 
+  // This variable represents the returned event. It will only contain a value
+  // if EventNeeded is true or if the last partition of the graph is a
+  // host-task.
   std::optional<EventImplPtr> SignalEvent;
-  if (MContainsHostTask) {
+
+  if (!MContainsHostTask) {
+    if (IsCGDataSafeForSchedulerBypass) {
+      SignalEvent = enqueuePartitionDirectly(MPartitions[0], Queue,
+                                             CGData.MEvents, EventNeeded);
+    } else {
+      bool RequestSchedulerEvent = EventNeeded || MIsUpdatable;
+      auto SchedulerEvent = enqueuePartitionWithScheduler(
+          MPartitions[0], Queue, CGData, RequestSchedulerEvent);
+
+      // If the graph is updatable, and we are going through the scheduler, we
+      // need to track the execution event to make sure that any future updates
+      // happen after the graph execution.
+      // There is no need to track the execution event when updates are not
+      // allowed because Unified Runtime already guarantees the execution order
+      // of command-buffers.
+      if (MIsUpdatable) {
+        MSchedulerDependencies.push_back(
+            EventNeeded ? SchedulerEvent.value()
+                        : std::move(SchedulerEvent.value()));
+      }
+
+      if (EventNeeded) {
+        SignalEvent = std::move(SchedulerEvent);
+      }
+    }
+  } else {
     SignalEvent = enqueuePartitions(
         Queue, CGData, IsCGDataSafeForSchedulerBypass, EventNeeded);
-  } else if (IsCGDataSafeForSchedulerBypass) {
-    SignalEvent = enqueuePartitionDirectly(MPartitions[0], Queue,
-                                           CGData.MEvents, EventNeeded);
-  } else {
-    bool RequestSchedulerEvent = EventNeeded || MIsUpdatable;
-    auto SchedulerEvent = enqueuePartitionWithScheduler(
-        MPartitions[0], Queue, CGData, RequestSchedulerEvent);
-
-    // If the graph is updatable, and we are going through the scheduler, we
-    // need to track the execution event to make sure that any future updates
-    // happen after the graph execution.
-    if (MIsUpdatable) {
-      MSchedulerDependencies.push_back(EventNeeded
-                                           ? SchedulerEvent.value()
-                                           : std::move(SchedulerEvent.value()));
-    }
-
-    if (EventNeeded) {
-      SignalEvent = std::move(SchedulerEvent);
-    }
   }
 
   if (EventNeeded) {
@@ -1233,6 +1272,63 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
 
   return SignalEvent;
 }
+
+// FIXME This is an older version with separate path for scheduler 1 partition
+// std::optional<EventImplPtr>
+// exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+//                          sycl::detail::CG::StorageInitHelper CGData,
+//                          bool EventNeeded) {
+//   WriteLock Lock(MMutex);
+//
+//   cleanupExecutionEvents(MSchedulerDependencies);
+//   CGData.MEvents.insert(CGData.MEvents.end(), MSchedulerDependencies.begin(),
+//                         MSchedulerDependencies.end());
+//
+//   // FIXME This could be done per Partition. But it's not a big deal.
+//   if (!MRequirements.empty()) {
+//     CGData.MRequirements.insert(CGData.MRequirements.end(),
+//                                 MRequirements.begin(), MRequirements.end());
+//     CGData.MAccStorage.insert(CGData.MAccStorage.end(), MAccessors.begin(),
+//                               MAccessors.end());
+//   }
+//
+//   bool IsCGDataSafeForSchedulerBypass =
+//       detail::Scheduler::areEventsSafeForSchedulerBypass(
+//           CGData.MEvents, Queue->getContextImplPtr()) &&
+//       CGData.MRequirements.empty();
+//
+//   std::optional<EventImplPtr> SignalEvent;
+//   if (MContainsHostTask) {
+//     SignalEvent = enqueuePartitions(
+//         Queue, CGData, IsCGDataSafeForSchedulerBypass, EventNeeded);
+//   } else if (IsCGDataSafeForSchedulerBypass) {
+//     SignalEvent = enqueuePartitionDirectly(MPartitions[0], Queue,
+//                                            CGData.MEvents, EventNeeded);
+//   } else {
+//     bool RequestSchedulerEvent = EventNeeded || MIsUpdatable;
+//     auto SchedulerEvent = enqueuePartitionWithScheduler(
+//         MPartitions[0], Queue, CGData, RequestSchedulerEvent);
+//
+//     // If the graph is updatable, and we are going through the scheduler, we
+//     // need to track the execution event to make sure that any future updates
+//     // happen after the graph execution.
+//     if (MIsUpdatable) {
+//       MSchedulerDependencies.push_back(EventNeeded
+//                                            ? SchedulerEvent.value()
+//                                            : std::move(SchedulerEvent.value()));
+//     }
+//
+//     if (EventNeeded) {
+//       SignalEvent = std::move(SchedulerEvent);
+//     }
+//   }
+//
+//   if (EventNeeded) {
+//     (*SignalEvent)->setProfilingEnabled(MEnableProfiling);
+//   }
+//
+//   return SignalEvent;
+// }
 
 /* FIXME OLD VERSION */
 // std::optional<sycl::event>

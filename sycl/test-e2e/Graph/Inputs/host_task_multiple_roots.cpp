@@ -5,9 +5,9 @@
 #include <sycl/properties/all_properties.hpp>
 
 int main() {
-  sycl::property_list QProp{sycl::property::queue::in_order()};
-  sycl::queue Queue(QProp);
-//  sycl::queue Queue;
+//  sycl::property_list QProp{sycl::property::queue::in_order()};
+//  sycl::queue Queue(QProp);
+  sycl::queue Queue;
 
   using T = int;
 

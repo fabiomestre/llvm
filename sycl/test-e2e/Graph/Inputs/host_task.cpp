@@ -1,8 +1,10 @@
 // This test uses a host_task when adding a command_graph node.
 
 #include "../graph_common.hpp"
+#include <sycl/properties/all_properties.hpp>
 
 int main() {
+//  sycl::queue Queue({sycl::property::queue::in_order{}});
   queue Queue{};
 
   using T = int;
