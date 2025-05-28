@@ -1006,6 +1006,19 @@ exec_graph_impl::~exec_graph_impl() {
   }
 }
 
+// Clean up any execution events which have finished so we don't pass them
+// to the scheduler.
+static void cleanupExecutionEvents(std::vector<EventImplPtr> &ExecutionEvents) {
+
+  auto Predicate = [](EventImplPtr &EventPtr) {
+    return EventPtr->isCompleted();
+  };
+
+  ExecutionEvents.erase(
+      std::remove_if(ExecutionEvents.begin(), ExecutionEvents.end(), Predicate),
+      ExecutionEvents.end());
+}
+
 EventImplPtr exec_graph_impl::enqueueHostTaskPartition(
     std::shared_ptr<partition> &Partition,
     const std::shared_ptr<sycl::detail::queue_impl> &Queue,
@@ -1105,27 +1118,67 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitionDirectly(
   }
 }
 
-// Clean up any execution events which have finished so we don't pass them
-// to the scheduler.
-static void cleanupExecutionEvents(std::vector<EventImplPtr> &ExecutionEvents) {
+std::optional<EventImplPtr> exec_graph_impl::enqueuePartitions(
+    const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+    sycl::detail::CG::StorageInitHelper &CGData,
+    bool IsCGDataSafeForSchedulerBypass, bool EventNeeded) {
 
-  auto Predicate = [](EventImplPtr &EventPtr) {
-    return EventPtr->isCompleted();
-  };
+  std::vector<EventImplPtr *> SignalEventDependencies;
+  std::optional<EventImplPtr> SignalEvent;
+  size_t NumEventsBeforePush = CGData.MEvents.size();
+  for (auto &Partition : MPartitions) {
 
-  ExecutionEvents.erase(
-      std::remove_if(ExecutionEvents.begin(), ExecutionEvents.end(), Predicate),
-      ExecutionEvents.end());
+    const size_t ElementsToRemove = CGData.MEvents.size() - NumEventsBeforePush;
+    CGData.MEvents.erase(CGData.MEvents.end() - ElementsToRemove,
+                         CGData.MEvents.end());
+
+    for (auto &Predecessor : Partition->MPredecessors) {
+      CGData.MEvents.push_back(Predecessor->MEvent);
+    }
+
+    std::optional<EventImplPtr> TempEvent;
+    bool IsLastPartition = (Partition == MPartitions.back());
+
+    if (Partition->MIsHostTask) {
+      TempEvent = enqueueHostTaskPartition(Partition, Queue, CGData.MEvents);
+    } else {
+      bool RequestEvent = !IsLastPartition || EventNeeded || MIsUpdatable;
+      bool SkipScheduler =
+          Partition->MPredecessors.empty() && IsCGDataSafeForSchedulerBypass;
+      if (SkipScheduler) {
+        TempEvent = enqueuePartitionDirectly(Partition, Queue, CGData.MEvents,
+                                             RequestEvent);
+      } else {
+        TempEvent = enqueuePartitionWithScheduler(Partition, Queue, CGData,
+                                                  RequestEvent);
+      }
+    }
+
+    if (MIsUpdatable && Partition->MSuccessors.empty()) {
+      MSchedulerDependencies.push_back(TempEvent.value());
+    }
+
+    if (!IsLastPartition) {
+      Partition->MEvent = std::move(TempEvent.value());
+
+      if (EventNeeded && Partition->MSuccessors.empty()) {
+        SignalEventDependencies.push_back(&Partition->MEvent);
+      }
+    } else if (EventNeeded || Partition->MIsHostTask) {
+      SignalEvent = std::move(TempEvent);
+    }
+  }
+
+  if (EventNeeded) {
+    for (auto &EventFromOtherPartitions : SignalEventDependencies) {
+      SignalEvent.value()->attachEventToComplete(*EventFromOtherPartitions);
+    }
+  }
+
+  return SignalEvent;
 }
 
-std::optional<sycl::event>
-exec_graph_impl::enqueuePartitions(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-                         sycl::detail::CG::StorageInitHelper& CGData,
-                         bool EventNeeded) {
-}
-
-// FIXME Why can't CGData be passed by reference?
-std::optional<sycl::event>
+std::optional<EventImplPtr>
 exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
                          sycl::detail::CG::StorageInitHelper CGData,
                          bool EventNeeded) {
@@ -1135,90 +1188,50 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
   CGData.MEvents.insert(CGData.MEvents.end(), MSchedulerDependencies.begin(),
                         MSchedulerDependencies.end());
 
-  bool EventsInCGDataAreSafeForBypassScheduler =
+  // FIXME This could be done per Partition. But it's not a big deal.
+  if (!MRequirements.empty()) {
+    CGData.MRequirements.insert(CGData.MRequirements.end(),
+                                MRequirements.begin(), MRequirements.end());
+    CGData.MAccStorage.insert(CGData.MAccStorage.end(), MAccessors.begin(),
+                              MAccessors.end());
+  }
+
+  bool IsCGDataSafeForSchedulerBypass =
       detail::Scheduler::areEventsSafeForSchedulerBypass(
-          CGData.MEvents, Queue->getContextImplPtr());
-  
+          CGData.MEvents, Queue->getContextImplPtr()) &&
+      CGData.MRequirements.empty();
+
   std::optional<EventImplPtr> SignalEvent;
-  size_t MEventsSize = CGData.MEvents.size();
-  bool RequirementsInserted = false;
-  auto &LastPartition = MPartitions.back();
-  auto &FirstPartition = MPartitions.front();
+  if (MContainsHostTask) {
+    SignalEvent = enqueuePartitions(
+        Queue, CGData, IsCGDataSafeForSchedulerBypass, EventNeeded);
+  } else if (IsCGDataSafeForSchedulerBypass) {
+    SignalEvent = enqueuePartitionDirectly(MPartitions[0], Queue,
+                                           CGData.MEvents, EventNeeded);
+  } else {
+    bool RequestSchedulerEvent = EventNeeded || MIsUpdatable;
+    auto SchedulerEvent = enqueuePartitionWithScheduler(
+        MPartitions[0], Queue, CGData, RequestSchedulerEvent);
 
-  std::vector<EventImplPtr> SignalEventDependencies;
-
-  for (auto &Partition : MPartitions) {
-
-    const size_t ElementsToRemove = CGData.MEvents.size() - MEventsSize;
-    CGData.MEvents.erase(CGData.MEvents.end() - ElementsToRemove,
-                         CGData.MEvents.end());
-
-    for (auto& Predecessor: Partition->MPredecessors) {
-      CGData.MEvents.push_back(Predecessor->MEvent);
+    // If the graph is updatable, and we are going through the scheduler, we
+    // need to track the execution event to make sure that any future updates
+    // happen after the graph execution.
+    if (MIsUpdatable) {
+      MSchedulerDependencies.push_back(EventNeeded
+                                           ? SchedulerEvent.value()
+                                           : std::move(SchedulerEvent.value()));
     }
 
-    if (Partition->MIsHostTask) {
-      SignalEvent = enqueueHostTaskPartition(Partition, Queue, CGData.MEvents);
-      Partition->MEvent = SignalEvent.value();
-      continue;
-    }
-
-    bool IsFirstPartition = Partition == FirstPartition;
-    bool IsLastPartition = Partition == LastPartition;
-    /* FIXME Ideally the partition should have information about whether it
-     * contains any requirements */
-    bool SkipScheduler = MRequirements.empty() && IsFirstPartition /*FIXME Change condition to check predecessors */ &&
-                         EventsInCGDataAreSafeForBypassScheduler;
-    bool SkipSignalEvent = IsLastPartition && !EventNeeded;
-
-    if (SkipScheduler) {
-      SignalEvent = enqueuePartitionDirectly(Partition, Queue, CGData.MEvents,
-                                             !SkipSignalEvent);
-    } else {
-      if (!RequirementsInserted) {
-        // FIXME If requirements were done per Partition, we could move this to
-        // the enequeue instead.
-        CGData.MRequirements.insert(CGData.MRequirements.end(),
-                                    MRequirements.begin(), MRequirements.end());
-        CGData.MAccStorage.insert(CGData.MAccStorage.end(), MAccessors.begin(),
-                                  MAccessors.end());
-        RequirementsInserted = true;
-      }
-
-      SignalEvent = enqueuePartitionWithScheduler(Partition, Queue, CGData,
-                                                  !SkipSignalEvent);
-    }
-
-    if (!SkipSignalEvent /*FIXME No need to store event if it last partition? */) {
-      Partition->MEvent = SignalEvent.value();
-    }
-
-    //FIXME Clean all this confusing if conditions
-    if (!SkipSignalEvent && !IsLastPartition && Partition->MSuccessors.empty()) {
-      SignalEventDependencies.push_back(SignalEvent.value());
+    if (EventNeeded) {
+      SignalEvent = std::move(SchedulerEvent);
     }
   }
 
-  for (auto& EventFromOtherPartitions: SignalEventDependencies) {
-    SignalEvent.value()->attachEventToComplete(EventFromOtherPartitions);
-    MSchedulerDependencies.push_back(EventFromOtherPartitions);
+  if (EventNeeded) {
+    (*SignalEvent)->setProfilingEnabled(MEnableProfiling);
   }
 
-  //FIXME Remove executionEvents concept and use this only for updating
-  if (SignalEvent.has_value()) {
-    MSchedulerDependencies.push_back(SignalEvent.value());
-    SignalEvent.value()->setProfilingEnabled(MEnableProfiling);
-  }
-
-  // FIXME Does it really have to be a queueEvent that is returned here?
-  std::optional<sycl::event> QueueEvent =
-      SignalEvent.has_value()
-          ? std::optional<sycl::event>(
-                sycl::detail::createSyclObjFromImpl<sycl::event>(
-                    SignalEvent.value()))
-          : std::optional<sycl::event>(std::nullopt);
-
-  return QueueEvent;
+  return SignalEvent;
 }
 
 /* FIXME OLD VERSION */

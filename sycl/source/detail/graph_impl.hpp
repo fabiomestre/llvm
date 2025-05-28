@@ -1372,10 +1372,10 @@ public:
       const std::shared_ptr<sycl::detail::queue_impl> &Queue,
       std::vector<detail::EventImplPtr> &WaitEvents, bool EventNeeded);
 
-  std::optional<sycl::event>
-enqueuePartitions(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-                         sycl::detail::CG::StorageInitHelper& CGData,
-                         bool EventNeeded);
+  std::optional<EventImplPtr>
+  enqueuePartitions(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+                    sycl::detail::CG::StorageInitHelper &CGData,
+                    bool IsCGDataSafeForSchedulerBypass, bool EventNeeded);
 
   /// Called by handler::ext_oneapi_command_graph() to schedule graph for
   /// execution.
@@ -1385,7 +1385,7 @@ enqueuePartitions(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
   /// operation needs to be returned.
   /// @return Returns an event if EventNeeded is true or if the last partition
   /// of the graph is a host-task. Returns std::nullopt otherwise.
-  std::optional<sycl::event>
+  std::optional<EventImplPtr>
   enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
           sycl::detail::CG::StorageInitHelper CGData, bool EventNeeded);
 
