@@ -981,12 +981,6 @@ exec_graph_impl::~exec_graph_impl() {
     const sycl::detail::AdapterPtr &Adapter =
         sycl::detail::getSyclObjImpl(MContext)->getAdapter();
     MSchedule.clear();
-    // We need to wait on all command buffer executions before we can release
-    // them.
-    // TODO Move this to UR
-    for (auto &Event : MSchedulerDependencies) {
-      Event->wait(Event);
-    }
 
     // Clean up any graph-owned allocations that were allocated
     MGraphImpl->getMemPool().deallocateAndUnmapAll();
