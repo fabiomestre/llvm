@@ -983,6 +983,7 @@ exec_graph_impl::~exec_graph_impl() {
     MSchedule.clear();
     // We need to wait on all command buffer executions before we can release
     // them.
+    // TODO Move this to UR
     for (auto &Event : MSchedulerDependencies) {
       Event->wait(Event);
     }
@@ -1142,7 +1143,7 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitions(
                          CGData.MEvents.end());
 
     for (auto &Predecessor : Partition->MPredecessors) {
-      CGData.MEvents.push_back(Predecessor->MEvent);
+      CGData.MEvents.push_back(Predecessor.lock()->MEvent);
     }
 
     bool IsLastPartition = (Partition == MPartitions.back());
@@ -1192,6 +1193,7 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitions(
         // complete dependency.
         PostCompleteDependencies.push_back(std::move(EnqueueEvent.value()));
       } else if (IsLastPartition && (EventNeeded || Partition->MIsHostTask)) {
+        // FIXME Scheduler doesn't guarantee dependencies in host-tasks. So we need to always return the event.
         // If we are in the last partition copy the event to SignalEvent,
         // so that it can be returned to the user.
         SignalEvent = std::move(EnqueueEvent);
@@ -1330,8 +1332,8 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
 //   return SignalEvent;
 // }
 
-/* FIXME OLD VERSION */
-// std::optional<sycl::event>
+// /* FIXME OLD VERSION */
+// std::optional<EventImplPtr>
 // exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
 //                          sycl::detail::CG::StorageInitHelper CGData, bool EventNeeded) {
 //   WriteLock Lock(MMutex);
@@ -1371,8 +1373,8 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
 //     if (CommandBuffer) {
 // // FIXME Could be needed but not sure. Not adding yet
 //       for (std::vector<sycl::detail::EventImplPtr>::iterator It =
-//                MExecutionEvents.begin();
-//            It != MExecutionEvents.end();) {
+//                MSchedulerDependencies.begin();
+//            It != MSchedulerDependencies.end();) {
 //         EventImplPtr &Event = *It;
 //         if (!Event->isCompleted()) {
 //           const std::vector<EventImplPtr> &AttachedEventsList =
@@ -1387,7 +1389,7 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
 //           ++It;
 //         } else {
 //           // Remove completed events
-//           It = MExecutionEvents.erase(It);
+//           It = MSchedulerDependencies.erase(It);
 //         }
 //       }
 // // FIXME End of could be needed
@@ -1458,7 +1460,7 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
 // // FIXME Could be needed but not sure. Not adding yet
 //   // Keep track of this execution event so we can make sure it's completed in
 //   // the destructor.
-//   MExecutionEvents.push_back(NewEvent);
+//   MSchedulerDependencies.push_back(NewEvent);
 //   // Attach events of previous partitions to ensure that when the returned event
 //   // is complete all execution associated with the graph have been completed.
 //   for (auto const &Elem : PartitionsExecutionEvents) {
@@ -1468,9 +1470,8 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
 //   }
 // // FIXME End of could be needed
 //   NewEvent->setProfilingEnabled(MEnableProfiling);
-//   sycl::event QueueEvent =
-//       sycl::detail::createSyclObjFromImpl<sycl::event>(NewEvent);
-//   return QueueEvent;
+//
+//   return NewEvent;
 // }
 
 void exec_graph_impl::duplicateNodes() {

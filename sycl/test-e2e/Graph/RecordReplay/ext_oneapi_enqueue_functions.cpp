@@ -44,6 +44,8 @@ int main() {
   auto GraphExec = Graph.finalize();
 
   exp_ext::execute_graph(InOrderQueue, GraphExec);
+  exp_ext::execute_graph(InOrderQueue, GraphExec);
+
   InOrderQueue.wait_and_throw();
 
   free(PtrA, InOrderQueue);

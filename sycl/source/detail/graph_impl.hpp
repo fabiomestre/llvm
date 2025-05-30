@@ -771,10 +771,10 @@ public:
   std::unordered_map<sycl::device, ur_exp_command_buffer_handle_t>
       MCommandBuffers;
   /// List of predecessors to this partition.
-  std::vector<std::shared_ptr<partition>> MPredecessors;
+  std::vector<std::weak_ptr<partition>> MPredecessors;
 
   /// List of successors to this partition.
-  std::vector<std::shared_ptr<partition>> MSuccessors;
+  std::vector<std::weak_ptr<partition>> MSuccessors;
 
   /// True if the graph of this partition is a single path graph
   /// and in-order optmization can be applied on it.
@@ -1419,6 +1419,11 @@ public:
   /// @return Vector of partitions in execution order.
   const std::vector<std::shared_ptr<partition>> &getPartitions() const {
     return MPartitions;
+  }
+
+  /// TODO
+  bool containsHostTask() const {
+    return MContainsHostTask;
   }
 
   /// Checks if the previous submissions of this graph have been completed

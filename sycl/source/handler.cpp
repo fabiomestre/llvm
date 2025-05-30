@@ -755,11 +755,13 @@ event handler::finalize() {
           nullptr, impl->MExecGraph, std::move(impl->CGData)));
 
     } else {
-      bool DiscardEvent =
-          !impl->MEventNeeded && MQueue->supportsDiscardingPiEvents();
+      bool DiscardEvent = !impl->MEventNeeded &&
+                          MQueue->supportsDiscardingPiEvents() &&
+                          !impl->MExecGraph->containsHostTask();
       std::optional<detail::EventImplPtr> GraphCompletionEvent =
           impl->MExecGraph->enqueue(MQueue, std::move(impl->CGData),
                                     !DiscardEvent);
+
       // TODO Rebase on top of Igor and Slawomir PRs
       MLastEvent = sycl::detail::createSyclObjFromImpl<sycl::event>(
           GraphCompletionEvent.value_or(

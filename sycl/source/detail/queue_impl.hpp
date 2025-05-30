@@ -745,7 +745,9 @@ protected:
   template <typename HandlerType = handler>
   event finalizeHandlerInOrderHostTaskUnlocked(HandlerType &Handler) {
     assert(isInOrder());
-    assert(Handler.getType() == CGType::CodeplayHostTask);
+    assert(Handler.getType() == CGType::CodeplayHostTask ||
+           (Handler.getType() == CGType::ExecCommandBuffer &&
+            getSyclObjImpl(Handler)->MExecGraph->containsHostTask()));
 
     auto &EventToBuildDeps = MGraph.expired() ? MDefaultGraphDeps.LastEventPtr
                                               : MExtGraphDeps.LastEventPtr;
@@ -779,7 +781,10 @@ protected:
   event finalizeHandlerInOrderWithDepsUnlocked(HandlerType &Handler) {
     // this is handled by finalizeHandlerInOrderHostTask
     assert(Handler.getType() != CGType::CodeplayHostTask);
+    assert(!(Handler.getType() == CGType::ExecCommandBuffer &&
+             getSyclObjImpl(Handler)->MExecGraph->containsHostTask()));
 
+    // FIXME TODO
     if (Handler.getType() == CGType::ExecCommandBuffer && MNoEventMode) {
       // TODO: this shouldn't be needed but without this
       // the legacy adapter doesn't synchronize the operations properly
