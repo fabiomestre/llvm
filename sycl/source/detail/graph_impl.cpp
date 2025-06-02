@@ -1017,22 +1017,34 @@ static void cleanupExecutionEvents(std::vector<EventImplPtr> &ExecutionEvents) {
 EventImplPtr exec_graph_impl::enqueueHostTaskPartition(
     std::shared_ptr<partition> &Partition,
     const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-    std::vector<detail::EventImplPtr> &WaitEvents) {
+    sycl::detail::CG::StorageInitHelper &CGData) {
 
   auto NodeImpl = Partition->MSchedule.front();
+  auto NodeCommandGroup =
+      static_cast<sycl::detail::CGHostTask *>(NodeImpl->MCommandGroup.get());
 
-  //FIXME is a deep copy of the command group really needed?
-  NodeImpl->MCommandGroup->getEvents().insert(
-      NodeImpl->MCommandGroup->getEvents().end(), WaitEvents.begin(),
-      WaitEvents.end());
-  // HostTask CG stores the Queue on which the task was submitted.
-  // In case of graph, this queue may differ from the actual execution
-  // queue. We therefore overload this Queue before submitting the task.
-  static_cast<sycl::detail::CGHostTask &>(*NodeImpl->MCommandGroup.get())
-      .MQueue = Queue;
+  CGData.MRequirements.insert(CGData.MRequirements.end(),
+                              NodeCommandGroup->getRequirements().begin(),
+                              NodeCommandGroup->getRequirements().end());
+  CGData.MAccStorage.insert(CGData.MAccStorage.end(),
+                            NodeCommandGroup->getAccStorage().begin(),
+                            NodeCommandGroup->getAccStorage().end());
+
+  assert(std::all_of(
+      NodeCommandGroup->MArgs.begin(), NodeCommandGroup->MArgs.end(),
+      [](ArgDesc Arg) {
+        return Arg.MType != sycl::detail::kernel_param_kind_t::kind_std_layout;
+      }));
+
+  // Create a copy of this node command-group which contains the right
+  // dependencies for the current execution.
+  std::unique_ptr<sycl::detail::CG> CommandGroup =
+      std::make_unique<sycl::detail::CGHostTask>(sycl::detail::CGHostTask(
+          NodeCommandGroup->MHostTask, Queue, NodeCommandGroup->MContext,
+          NodeCommandGroup->MArgs, CGData, NodeCommandGroup->getType()));
 
   return sycl::detail::Scheduler::getInstance().addCG(
-      NodeImpl->getCGCopy(), Queue, /*EventNeeded=*/true);
+      std::move(CommandGroup), Queue, /*EventNeeded=*/true);
 }
 
 std::optional<EventImplPtr> exec_graph_impl::enqueuePartitionWithScheduler(
@@ -1069,27 +1081,29 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitionDirectly(
     }
   };
 
-  // FIXME Clean this up a bit
-  std::vector<ur_event_handle_t> UrWaitEvents{};
-  UrWaitEvents.reserve(WaitEvents.size());
+  // Create a list containing all the UR event handles in WaitEvents. WaitEvents
+  // is assumed to be safe for scheduler bypass and any host-task events that it
+  // contains can be ignored.
+  std::vector<ur_event_handle_t> UrEventHandles{};
+  UrEventHandles.reserve(WaitEvents.size());
   for (auto &SyclWaitEvent : WaitEvents) {
-    assert(!SyclWaitEvent->isHost() || SyclWaitEvent->isCompleted());
-    assert(!SyclWaitEvent->isNOP() || SyclWaitEvent->isCompleted());
-    ur_event_handle_t URHandle = SyclWaitEvent->getHandle();
+    auto URHandle = SyclWaitEvent->getHandle();
     if (URHandle) {
-      UrWaitEvents.push_back(URHandle);
+      UrEventHandles.push_back(URHandle);
     }
   }
-  const ur_event_handle_t *PhEventWaitList =
-      UrWaitEvents.size() > 0 ? UrWaitEvents.data() : nullptr;
 
   auto CommandBuffer = Partition->MCommandBuffers[Queue->get_device()];
+  const size_t UrEnqueueWaitListSize = UrEventHandles.size();
+  const ur_event_handle_t *UrEnqueueWaitList =
+      UrEnqueueWaitListSize == 0 ? nullptr : UrEventHandles.data();
+
   if (!EventNeeded) {
     ur_result_t UrResult =
         Queue->getAdapter()
             ->call_nocheck<sycl::detail::UrApiKind::urEnqueueCommandBufferExp>(
-                Queue->getHandleRef(), CommandBuffer, UrWaitEvents.size(),
-                PhEventWaitList, nullptr);
+                Queue->getHandleRef(), CommandBuffer, UrEnqueueWaitListSize,
+                UrEnqueueWaitList, nullptr);
     CheckURResult(UrResult);
     return std::nullopt;
   } else {
@@ -1101,8 +1115,8 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitionDirectly(
     ur_result_t UrResult =
         Queue->getAdapter()
             ->call_nocheck<sycl::detail::UrApiKind::urEnqueueCommandBufferExp>(
-                Queue->getHandleRef(), CommandBuffer, UrWaitEvents.size(),
-                PhEventWaitList, &UrEvent);
+                Queue->getHandleRef(), CommandBuffer, UrEventHandles.size(),
+                UrEnqueueWaitList, &UrEvent);
     CheckURResult(UrResult);
     NewEvent->setHandle(UrEvent);
     NewEvent->setEventFromSubmittedExecCommandBuffer(true);
@@ -1147,7 +1161,7 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitions(
       // The event returned by a host-task is always needed to synchronize with
       // other partitions or to be used by the sycl queue as a dependency for
       // further commands.
-      EnqueueEvent = enqueueHostTaskPartition(Partition, Queue, CGData.MEvents);
+      EnqueueEvent = enqueueHostTaskPartition(Partition, Queue, CGData);
     } else {
       // We always need to request an event to use as dependency between
       // partitions executions and between graph executions because the
@@ -1193,6 +1207,8 @@ std::optional<EventImplPtr> exec_graph_impl::enqueuePartitions(
         SignalEvent = std::move(EnqueueEvent);
       }
     }
+
+    // FIXME Should CGData be cleared here as we only need the previous partition event?
   }
 
   if (EventNeeded) {

@@ -784,14 +784,6 @@ protected:
     assert(!(Handler.getType() == CGType::ExecCommandBuffer &&
              getSyclObjImpl(Handler)->MExecGraph->containsHostTask()));
 
-    // FIXME TODO
-    if (Handler.getType() == CGType::ExecCommandBuffer && MNoEventMode) {
-      // TODO: this shouldn't be needed but without this
-      // the legacy adapter doesn't synchronize the operations properly
-      // when non-immediate command lists are used.
-      Handler.depends_on(insertHelperBarrier(Handler));
-    }
-
     auto &EventToBuildDeps = MGraph.expired() ? MDefaultGraphDeps.LastEventPtr
                                               : MExtGraphDeps.LastEventPtr;
 

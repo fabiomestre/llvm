@@ -1354,7 +1354,7 @@ public:
   /// @return
   EventImplPtr enqueueHostTaskPartition(
     std::shared_ptr<partition>& Partition, const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-    std::vector<detail::EventImplPtr> &WaitEvents);
+    sycl::detail::CG::StorageInitHelper &CGData);
 
   /// Enqueue the command buffer using the scheduler.
   /// @param EventNeeded Whether the signalling events for this operation should
