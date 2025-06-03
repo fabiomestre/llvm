@@ -299,6 +299,7 @@ void exec_graph_impl::makePartitions() {
   // Add an empty partition if there is no partition, i.e. empty graph
   if (MPartitions.size() == 0) {
     MPartitions.push_back(std::make_shared<partition>());
+    MRootPartitions.push_back(MPartitions[0]);
   }
 
   // Make global schedule list
@@ -886,6 +887,30 @@ exec_graph_impl::enqueueNode(ur_exp_command_buffer_handle_t CommandBuffer,
 
   return Event->getSyncPoint();
 }
+
+void exec_graph_impl::buildRequirements() {
+
+  for (auto &Node : MNodeStorage) {
+    if (!Node->MCommandGroup)
+      continue;
+
+    MRequirements.insert(MRequirements.end(),
+                         Node->MCommandGroup->getRequirements().begin(),
+                         Node->MCommandGroup->getRequirements().end());
+
+    std::shared_ptr<partition> &Partition = MPartitions[MPartitionNodes[Node]];
+
+    Partition->MRequirements.insert(
+        Partition->MRequirements.end(),
+        Node->MCommandGroup->getRequirements().begin(),
+        Node->MCommandGroup->getRequirements().end());
+
+    Partition->MAccessors.insert(Partition->MAccessors.end(),
+                                 Node->MCommandGroup->getAccStorage().begin(),
+                                 Node->MCommandGroup->getAccStorage().end());
+  }
+}
+
 void exec_graph_impl::createCommandBuffers(
     sycl::device Device, std::shared_ptr<partition> &Partition) {
   ur_exp_command_buffer_handle_t OutCommandBuffer;
@@ -926,15 +951,21 @@ void exec_graph_impl::createCommandBuffers(
       MSyncPoints[Node] = enqueueNode(OutCommandBuffer, Node);
     }
 
-    // Append Node requirements to overall graph requirements
-    MRequirements.insert(MRequirements.end(),
-                         Node->MCommandGroup->getRequirements().begin(),
-                         Node->MCommandGroup->getRequirements().end());
-    // Also store the actual accessor to make sure they are kept alive when
-    // commands are submitted
-    MAccessors.insert(MAccessors.end(),
-                      Node->MCommandGroup->getAccStorage().begin(),
-                      Node->MCommandGroup->getAccStorage().end());
+    // // Append Node requirements to overall graph requirements
+    // MRequirements.insert(MRequirements.end(),
+    //                      Node->MCommandGroup->getRequirements().begin(),
+    //                      Node->MCommandGroup->getRequirements().end());
+    //
+    // Partition->MRequirements.insert(
+    //     Partition->MRequirements.end(),
+    //     Node->MCommandGroup->getRequirements().begin(),
+    //     Node->MCommandGroup->getRequirements().end());
+    //
+    // // Also store the actual accessor to make sure they are kept alive when
+    // // commands are submitted
+    // Partition->MAccessors.insert(Partition->MAccessors.end(),
+    //                              Node->MCommandGroup->getAccStorage().begin(),
+    //                              Node->MCommandGroup->getAccStorage().end());
   }
 
   Res = Adapter
@@ -1059,6 +1090,15 @@ EventImplPtr exec_graph_impl::enqueuePartitionWithScheduler(
     const std::shared_ptr<sycl::detail::queue_impl> &Queue,
     sycl::detail::CG::StorageInitHelper CGData, bool EventNeeded) {
 
+  if (!Partition->MRequirements.empty()) {
+    CGData.MRequirements.insert(CGData.MRequirements.end(),
+                                Partition->MRequirements.begin(),
+                                Partition->MRequirements.end());
+    CGData.MAccStorage.insert(CGData.MAccStorage.end(),
+                              Partition->MAccessors.begin(),
+                              Partition->MAccessors.end());
+  }
+
   auto CommandBuffer = Partition->MCommandBuffers[Queue->get_device()];
 
   std::unique_ptr<sycl::detail::CG> CommandGroup =
@@ -1141,8 +1181,8 @@ EventImplPtr exec_graph_impl::enqueuePartitions(
   // which cannot be tracked with a single scheduler event.
   std::vector<EventImplPtr> PostCompleteDependencies;
 
-  // This variable represents the returned event. It will only contain a value
-  // if EventNeeded is true.
+  // This variable represents the returned event. It will always be nullptr if
+  // EventNeeded is false.
   EventImplPtr SignalEvent;
 
   // CGData.MEvents gets cleared after every partition enqueue. If we need the
@@ -1191,8 +1231,9 @@ EventImplPtr exec_graph_impl::enqueuePartitions(
       // scheduler and, since only the scheduler can wait on host-task events,
       // any subsequent partitions that depend on a host-task partition also
       // need to use the scheduler.
-      bool SkipScheduler =
-          Partition->MPredecessors.empty() && IsCGDataSafeForSchedulerBypass;
+      bool SkipScheduler = Partition->MPredecessors.empty() &&
+                           IsCGDataSafeForSchedulerBypass &&
+                           Partition->MRequirements.empty();
       if (SkipScheduler) {
         EnqueueEvent = enqueuePartitionDirectly(Partition, Queue,
                                                 CGData.MEvents, RequestEvent);
@@ -1250,25 +1291,19 @@ exec_graph_impl::enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
   CGData.MEvents.insert(CGData.MEvents.end(), MSchedulerDependencies.begin(),
                         MSchedulerDependencies.end());
 
-  // FIXME This could be done per Partition. But it's not a big deal.
-  if (!MRequirements.empty()) {
-    CGData.MRequirements.insert(CGData.MRequirements.end(),
-                                MRequirements.begin(), MRequirements.end());
-    CGData.MAccStorage.insert(CGData.MAccStorage.end(), MAccessors.begin(),
-                              MAccessors.end());
-  }
-
   bool IsCGDataSafeForSchedulerBypass =
       detail::Scheduler::areEventsSafeForSchedulerBypass(
           CGData.MEvents, Queue->getContextImplPtr()) &&
       CGData.MRequirements.empty();
 
-  // This variable represents the returned event. It will only contain a value
-  // if EventNeeded is true.
+  // This variable represents the returned event. It will always be nullptr if
+  // EventNeeded is false.
   EventImplPtr SignalEvent;
 
   if (!MContainsHostTask) {
-    if (IsCGDataSafeForSchedulerBypass) {
+    bool SkipScheduler =
+        IsCGDataSafeForSchedulerBypass && MPartitions[0]->MRequirements.empty();
+    if (SkipScheduler) {
       SignalEvent = enqueuePartitionDirectly(MPartitions[0], Queue,
                                              CGData.MEvents, EventNeeded);
     } else {
@@ -1581,17 +1616,11 @@ void exec_graph_impl::update(
   // Rebuild cached requirements and accessor storage for this graph with
   // updated nodes
   MRequirements.clear();
-  MAccessors.clear();
-  for (auto &Node : MNodeStorage) {
-    if (!Node->MCommandGroup)
-      continue;
-    MRequirements.insert(MRequirements.end(),
-                         Node->MCommandGroup->getRequirements().begin(),
-                         Node->MCommandGroup->getRequirements().end());
-    MAccessors.insert(MAccessors.end(),
-                      Node->MCommandGroup->getAccStorage().begin(),
-                      Node->MCommandGroup->getAccStorage().end());
+  for (auto &Partition : MPartitions) {
+    Partition->MRequirements.clear();
+    Partition->MAccessors.clear();
   }
+  buildRequirements();
 }
 
 bool exec_graph_impl::needsScheduledUpdate(
@@ -2150,6 +2179,7 @@ void executable_command_graph::finalizeImpl() {
       impl->createCommandBuffers(Device, Partition);
     }
   }
+  impl->buildRequirements();
 }
 
 void executable_command_graph::update(

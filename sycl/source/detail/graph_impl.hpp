@@ -776,6 +776,12 @@ public:
   /// List of successors to this partition.
   std::vector<std::weak_ptr<partition>> MSuccessors;
 
+  /// List of requirements for this partition.
+  std::vector<sycl::detail::AccessorImplHost *> MRequirements;
+
+  /// Storage for accessors which are used by this partition.
+  std::vector<AccessorImplPtr> MAccessors;
+
   /// True if the graph of this partition is a single path graph
   /// and in-order optmization can be applied on it.
   bool MIsInOrderGraph = false;
@@ -1359,6 +1365,10 @@ public:
                        sycl::detail::CG::StorageInitHelper CGData,
                        bool EventNeeded);
 
+  /// Iterates through all the nodes in the graph to build the list of
+  /// accessor requirements for the whole graph and for each partition.
+  void buildRequirements();
+
   /// Turns the internal graph representation into UR command-buffers for a
   /// device.
   /// @param Device Device to create backend command-buffers for.
@@ -1633,9 +1643,6 @@ private:
   /// List of requirements for enqueueing this command graph, accumulated from
   /// all nodes enqueued to the graph.
   std::vector<sycl::detail::AccessorImplHost *> MRequirements;
-  /// Storage for accessors which are used by this graph, accumulated from
-  /// all nodes enqueued to the graph.
-  std::vector<sycl::detail::AccessorImplPtr> MAccessors;
   /// List of dependencies that enqueue or update commands need to wait on
   /// when using the scheduler path.
   std::vector<sycl::detail::EventImplPtr> MSchedulerDependencies;
