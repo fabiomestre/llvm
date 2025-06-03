@@ -758,14 +758,13 @@ event handler::finalize() {
       bool DiscardEvent = !impl->MEventNeeded &&
                           MQueue->supportsDiscardingPiEvents() &&
                           !impl->MExecGraph->containsHostTask();
-      std::optional<detail::EventImplPtr> GraphCompletionEvent =
-          impl->MExecGraph->enqueue(MQueue, std::move(impl->CGData),
-                                    !DiscardEvent);
-
-      // TODO Rebase on top of Igor and Slawomir PRs
+      detail::EventImplPtr GraphCompletionEvent = impl->MExecGraph->enqueue(
+          MQueue, std::move(impl->CGData), !DiscardEvent);
       MLastEvent = sycl::detail::createSyclObjFromImpl<sycl::event>(
-          GraphCompletionEvent.value_or(
-              std::make_shared<sycl::detail::event_impl>(MQueue)));
+          GraphCompletionEvent
+              ? GraphCompletionEvent
+              : std::make_shared<sycl::detail::event_impl>(MQueue));
+      // TODO Rebase on top of Igor and Slawomir PRs
       return MLastEvent;
     }
   } break;

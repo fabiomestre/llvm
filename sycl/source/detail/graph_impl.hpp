@@ -1347,47 +1347,17 @@ public:
   /// host_task.
   void makePartitions();
 
-  /// TODO
-  /// @param Partition
-  /// @param Queue
-  /// @param CGData
-  /// @return
-  EventImplPtr enqueueHostTaskPartition(
-    std::shared_ptr<partition>& Partition, const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-    sycl::detail::CG::StorageInitHelper &CGData);
-
-  /// Enqueue the command buffer using the scheduler.
-  /// @param EventNeeded Whether the signalling events for this operation should
-  /// be returned to the user.
-  std::optional<EventImplPtr> enqueuePartitionWithScheduler(
-      std::shared_ptr<partition> &Partition,
-      const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-      sycl::detail::CG::StorageInitHelper &CGData, bool EventNeeded);
-
-  /// Enqueue the command buffer without using the scheduler
-  /// @param EventNeeded Whether the signalling events for this operation should
-  /// be returned to the user.
-  std::optional<EventImplPtr> enqueuePartitionDirectly(
-      std::shared_ptr<partition> &Partition,
-      const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-      std::vector<detail::EventImplPtr> &WaitEvents, bool EventNeeded);
-
-  std::optional<EventImplPtr>
-  enqueuePartitions(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-                    sycl::detail::CG::StorageInitHelper &CGData,
-                    bool IsCGDataSafeForSchedulerBypass, bool EventNeeded);
-
   /// Called by handler::ext_oneapi_command_graph() to schedule graph for
   /// execution.
   /// @param Queue Command-queue to schedule execution on.
   /// @param CGData Command-group data provided by the sycl::handler
   /// @param EventNeeded Whether an event signalling the completion of this
   /// operation needs to be returned.
-  /// @return Returns an event if EventNeeded is true or if the last partition
-  /// of the graph is a host-task. Returns std::nullopt otherwise.
-  std::optional<EventImplPtr>
-  enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
-          sycl::detail::CG::StorageInitHelper CGData, bool EventNeeded);
+  /// @return Returns an event if EventNeeded is true. Returns std::nullopt
+  /// otherwise.
+  EventImplPtr enqueue(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+                       sycl::detail::CG::StorageInitHelper CGData,
+                       bool EventNeeded);
 
   /// Turns the internal graph representation into UR command-buffers for a
   /// device.
@@ -1506,6 +1476,68 @@ private:
                     ur_exp_command_buffer_handle_t CommandBuffer,
                     std::shared_ptr<node_impl> Node);
 
+  /// Enqueues a host-task partition (i.e. a partition that contains only a
+  /// single node and that node is a host-task).
+  /// @param Partition The partition to enqueue.
+  /// @param Queue Command-queue to schedule execution on.
+  /// @param CGData Command-group data used for initializing the host-task
+  /// command-group.
+  /// @param EventNeeded Whether an event signalling the completion of this
+  /// operation needs to be returned.
+  /// @return If EventNeeded is true returns the event resulting from enqueueing
+  /// the host-task through the scheduler. Returns nullptr otherwise.
+  EventImplPtr enqueueHostTaskPartition(
+      std::shared_ptr<partition> &Partition,
+      const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+      sycl::detail::CG::StorageInitHelper CGData, bool EventNeeded);
+
+  /// Enqueues a graph partition that contains no host-tasks using the
+  /// scheduler.
+  /// @param Partition The partition to enqueue.
+  /// @param Queue Command-queue to schedule execution on.
+  /// @param CGData Command-group data used for initializing the command-buffer
+  /// command-group.
+  /// @param EventNeeded Whether an event signalling the completion of this
+  /// operation needs to be returned.
+  /// @return If EventNeeded is true returns the event resulting from enqueueing
+  /// the command-buffer through the scheduler. Returns nullptr otherwise.
+  EventImplPtr enqueuePartitionWithScheduler(
+      std::shared_ptr<partition> &Partition,
+      const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+      sycl::detail::CG::StorageInitHelper CGData, bool EventNeeded);
+
+  /// Enqueues a graph partition that contains no host-tasks by directly calling
+  /// the unified-runtime API (i.e. avoids scheduler overhead).
+  /// @param Partition The partition to enqueue.
+  /// @param Queue Command-queue to schedule execution on.
+  /// @param WaitEvents List of events to wait on. All the events on this list
+  /// must be safe for scheduler bypass. Only events containing a valid UR event
+  /// handle will be waited for.
+  /// @param EventNeeded Whether an event signalling the completion of this
+  /// operation needs to be returned.
+  /// @return If EventNeeded is true returns the event resulting from enqueueing
+  /// the command-buffer. Returns nullptr otherwise.
+  EventImplPtr enqueuePartitionDirectly(
+      std::shared_ptr<partition> &Partition,
+      const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+      std::vector<detail::EventImplPtr> &WaitEvents, bool EventNeeded);
+
+  /// Enqueues all the partitions in a graph.
+  /// @param Queue Command-queue to schedule execution on.
+  /// @param CGData Command-group data that contains the dependencies and
+  /// accessor requirements needed to enqueue this graph.
+  /// @param IsCGDataSafeForSchedulerBypass Whether CGData contains any events
+  /// that require enqueuing through the scheduler (e.g. requirements or
+  /// host-task events).
+  /// @param EventNeeded Whether an event signalling the completion of this
+  /// operation needs to be returned.
+  /// @return If EventNeeded is true returns the event resulting from enqueueing
+  /// the command-buffer. Returns nullptr otherwise.
+  EventImplPtr
+  enqueuePartitions(const std::shared_ptr<sycl::detail::queue_impl> &Queue,
+                    sycl::detail::CG::StorageInitHelper &CGData,
+                    bool IsCGDataSafeForSchedulerBypass, bool EventNeeded);
+
   /// Iterates back through predecessors to find the real dependency.
   /// @param[out] Deps Found dependencies.
   /// @param[in] CurrentNode Node to find dependencies for.
@@ -1615,6 +1647,8 @@ private:
   std::unordered_map<std::shared_ptr<node_impl>,
                      ur_exp_command_buffer_command_handle_t>
       MCommandMap;
+  /// List of partition without any predecessors in this exec graph.
+  std::vector<std::weak_ptr<partition>> MRootPartitions;
   /// True if this graph can be updated (set with property::updatable)
   bool MIsUpdatable;
   /// If true, the graph profiling is enabled.
