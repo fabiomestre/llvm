@@ -73,7 +73,7 @@ public:
   bool MEventNeeded = true;
 
   // Stores auxiliary resources used by internal operations.
-  std::vector<std::shared_ptr<const void>> MAuxiliaryResources;
+  std::optional<std::vector<std::shared_ptr<const void>>> MAuxiliaryResources;
 
   std::shared_ptr<detail::kernel_bundle_impl> MKernelBundle;
 
@@ -136,8 +136,8 @@ public:
 
   // Storage for any SYCL Graph dynamic parameters which have been flagged for
   // registration in the CG, along with the argument index for the parameter.
-  std::vector<std::pair<
-      ext::oneapi::experimental::detail::dynamic_parameter_impl *, int>>
+  std::optional<std::vector<std::pair<
+      ext::oneapi::experimental::detail::dynamic_parameter_impl *, int>>>
       MDynamicParameters;
 
   /// The storage for the arguments passed.
@@ -147,15 +147,15 @@ public:
   detail::CG::StorageInitHelper CGData;
 
   /// The list of arguments for the kernel.
-  std::vector<detail::ArgDesc> MArgs;
+  std::optional<std::vector<detail::ArgDesc>> MArgs;
 
   /// The list of associated accessors with this handler.
   /// These accessors were created with this handler as argument or
   /// have become required for this handler via require method.
-  std::vector<detail::ArgDesc> MAssociatedAccesors;
+  std::optional<std::vector<detail::ArgDesc>> MAssociatedAccesors;
 
   /// Struct that encodes global size, local size, ...
-  detail::NDRDescT MNDRDesc;
+  std::optional<detail::NDRDescT> MNDRDesc;
 
   /// Type of the command group, e.g. kernel, fill. Can also encode version.
   /// Use getType and setType methods to access this variable unless
@@ -208,20 +208,20 @@ public:
   /// Storage for the CG created when handling graph nodes added explicitly.
   std::unique_ptr<detail::CG> MGraphNodeCG;
   /// Storage for node dependencies passed when adding a graph node explicitly
-  std::vector<std::shared_ptr<ext::oneapi::experimental::detail::node_impl>>
+  std::optional<std::vector<std::shared_ptr<ext::oneapi::experimental::detail::node_impl>>>
       MNodeDeps;
 
   /// Storage for lambda/function when using HostTask
   std::shared_ptr<detail::HostTask> MHostTask;
   /// The list of valid SYCL events that need to complete
   /// before barrier command can be executed
-  std::vector<detail::EventImplPtr> MEventsWaitWithBarrier;
+  std::optional<std::vector<detail::EventImplPtr>> MEventsWaitWithBarrier;
 
   /// True if MCodeLoc is sycl entry point code location
   bool MIsTopCodeLoc = true;
 
   /// List of work group memory objects associated with this handler
-  std::vector<std::shared_ptr<detail::work_group_memory_impl>>
+  std::optional<std::vector<std::shared_ptr<detail::work_group_memory_impl>>>
       MWorkGroupMemoryObjects;
 
   /// Potential event mode for the result event of the command.

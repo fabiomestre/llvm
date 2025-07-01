@@ -526,14 +526,16 @@ graph_impl::add(std::function<void(handler &)> CGF,
   // register the actual nodes with them.
   auto &DynamicParams = Handler.impl->MDynamicParameters;
 
-  if (NodeType != node_type::kernel && DynamicParams.size() > 0) {
+  if (NodeType != node_type::kernel && DynamicParams.has_value() && DynamicParams.value().size() > 0) {
     throw sycl::exception(sycl::make_error_code(errc::invalid),
                           "dynamic_parameters cannot be registered with graph "
                           "nodes which do not represent kernel executions");
   }
 
-  for (auto &[DynamicParam, ArgIndex] : DynamicParams) {
-    DynamicParam->registerNode(NodeImpl, ArgIndex);
+  if (DynamicParams.has_value()) {
+    for (auto &[DynamicParam, ArgIndex] : DynamicParams.value()) {
+      DynamicParam->registerNode(NodeImpl, ArgIndex);
+    }
   }
 
   return NodeImpl;
@@ -1025,10 +1027,16 @@ EventImplPtr exec_graph_impl::enqueueHostTaskPartition(
   auto NodeCommandGroup =
       static_cast<sycl::detail::CGHostTask *>(NodeImpl->MCommandGroup.get());
 
-  CGData.MRequirements.insert(CGData.MRequirements.end(),
+  if (!CGData.MRequirements.has_value()) {
+    CGData.MRequirements = std::vector<detail::AccessorImplHost *>{};
+  }
+  if (!CGData.MAccStorage.has_value()) {
+    CGData.MAccStorage = std::vector<detail::AccessorImplPtr>{};
+  }
+  CGData.MRequirements.value().insert(CGData.MRequirements.value().end(),
                               NodeCommandGroup->getRequirements().begin(),
                               NodeCommandGroup->getRequirements().end());
-  CGData.MAccStorage.insert(CGData.MAccStorage.end(),
+  CGData.MAccStorage.value().insert(CGData.MAccStorage.value().end(),
                             NodeCommandGroup->getAccStorage().begin(),
                             NodeCommandGroup->getAccStorage().end());
 
@@ -1060,10 +1068,16 @@ EventImplPtr exec_graph_impl::enqueuePartitionWithScheduler(
     sycl::detail::CG::StorageInitHelper CGData, bool EventNeeded) {
 
   if (!Partition->MRequirements.empty()) {
-    CGData.MRequirements.insert(CGData.MRequirements.end(),
+    if (!CGData.MRequirements.has_value()) {
+      CGData.MRequirements = std::vector<detail::AccessorImplHost *>{};
+    }
+    if (!CGData.MAccStorage.has_value()) {
+      CGData.MAccStorage = std::vector<detail::AccessorImplPtr>{};
+    }
+    CGData.MRequirements.value().insert(CGData.MRequirements.value().end(),
                                 Partition->MRequirements.begin(),
                                 Partition->MRequirements.end());
-    CGData.MAccStorage.insert(CGData.MAccStorage.end(),
+    CGData.MAccStorage.value().insert(CGData.MAccStorage.value().end(),
                               Partition->MAccessors.begin(),
                               Partition->MAccessors.end());
   }
@@ -1085,7 +1099,7 @@ EventImplPtr exec_graph_impl::enqueuePartitionWithScheduler(
 
 EventImplPtr exec_graph_impl::enqueuePartitionDirectly(
     std::shared_ptr<partition> &Partition, sycl::detail::queue_impl &Queue,
-    std::vector<detail::EventImplPtr> &WaitEvents, bool EventNeeded) {
+    std::optional<std::vector<detail::EventImplPtr>> &WaitEvents, bool EventNeeded) {
 
   ur_event_handle_t *UrEnqueueWaitList = nullptr;
   size_t UrEnqueueWaitListSize = 0;
@@ -1094,9 +1108,10 @@ EventImplPtr exec_graph_impl::enqueuePartitionDirectly(
   // is assumed to be safe for scheduler bypass and any host-task events that it
   // contains can be ignored.
   std::vector<ur_event_handle_t> UrEventHandles{};
-  if (!WaitEvents.empty()) {
-    UrEventHandles.reserve(WaitEvents.size());
-    for (auto &SyclWaitEvent : WaitEvents) {
+  if (WaitEvents.has_value()) {
+    auto& WaitEventsVector = WaitEvents.value();
+    UrEventHandles.reserve(WaitEventsVector.size());
+    for (auto &SyclWaitEvent : WaitEventsVector) {
       if (auto URHandle = SyclWaitEvent->getHandle()) {
         UrEventHandles.push_back(URHandle);
       }
@@ -1147,17 +1162,21 @@ exec_graph_impl::enqueuePartitions(sycl::detail::queue_impl &Queue,
   // EventNeeded is false.
   EventImplPtr SignalEvent;
 
+  if (!CGData.MEvents.has_value()) {
+    CGData.MEvents = std::vector<detail::EventImplPtr>{};
+  }
+
   // CGData.MEvents gets cleared after every partition enqueue. If we need the
   // original events, a backup needs to be created now. This is only needed when
   // the graph contains more than one root partition.
   std::vector<detail::EventImplPtr> BackupCGDataEvents;
   if (MRootPartitions.size() > 1) {
-    BackupCGDataEvents = CGData.MEvents;
+    BackupCGDataEvents = CGData.MEvents.value();
   }
 
   for (auto &Partition : MPartitions) {
 
-    if (Partition->MPredecessors.empty() && CGData.MEvents.empty()) {
+    if (Partition->MPredecessors.empty() && CGData.MEvents.value().empty()) {
       // If this is a root partition and CGData has been cleared already, we
       // need to restore it so that the partition execution waits for the
       // dependencies of this graph execution.
@@ -1167,7 +1186,7 @@ exec_graph_impl::enqueuePartitions(sycl::detail::queue_impl &Queue,
       // partitions. To enforce this ordering, we need to add these dependencies
       // to CGData.
       for (auto &Predecessor : Partition->MPredecessors) {
-        CGData.MEvents.push_back(Predecessor->MEvent);
+        CGData.MEvents.value().push_back(Predecessor->MEvent);
       }
     }
 
@@ -1230,7 +1249,7 @@ exec_graph_impl::enqueuePartitions(sycl::detail::queue_impl &Queue,
 
     // Clear the event list so that unnecessary dependencies are not added on
     // future partition executions.
-    CGData.MEvents.clear();
+    CGData.MEvents.value().clear();
   }
 
   if (EventNeeded) {
@@ -1246,19 +1265,29 @@ EventImplPtr
 exec_graph_impl::enqueue(sycl::detail::queue_impl &Queue,
                          sycl::detail::CG::StorageInitHelper &CGData,
                          bool EventNeeded) {
+
   WriteLock Lock(MMutex);
 
   if (!MSchedulerDependencies.empty()) {
     cleanupExecutionEvents(MSchedulerDependencies);
-    CGData.MEvents.insert(CGData.MEvents.end(), MSchedulerDependencies.begin(),
-                          MSchedulerDependencies.end());
+    if (!CGData.MEvents.has_value()) {
+      CGData.MEvents = std::vector<detail::EventImplPtr>{};
+    }
+    CGData.MEvents.value().insert(CGData.MEvents.value().end(),
+                                  MSchedulerDependencies.begin(),
+                                  MSchedulerDependencies.end());
   }
 
+  if (CGData.MRequirements.has_value()) {
+    assert(!CGData.MRequirements.value().empty());
+  }
+
+
   bool IsCGDataSafeForSchedulerBypass =
-      (CGData.MEvents.empty() ||
+      (!CGData.MEvents.has_value() ||
        detail::Scheduler::areEventsSafeForSchedulerBypass(
            CGData.MEvents, Queue.getContextImpl())) &&
-      CGData.MRequirements.empty();
+      !CGData.MRequirements.has_value();
 
   // This variable represents the returned event. It will always be nullptr if
   // EventNeeded is false.

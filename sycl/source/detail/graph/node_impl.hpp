@@ -277,7 +277,7 @@ public:
       std::vector<sycl::detail::ArgDesc> NewArgs = CommandGroupPtr->MArgs;
 
       rebuildArgStorage(NewArgs, CommandGroupPtr->getArgsStorage(),
-                        Data.MArgsStorage);
+                        Data.MArgsStorage.value());
 
       sycl::detail::code_location Loc(CommandGroupPtr->MFileName.data(),
                                       CommandGroupPtr->MFunctionName.data(),

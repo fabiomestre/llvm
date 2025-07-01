@@ -177,22 +177,43 @@ public:
     // The following storages are needed to ensure that arguments won't die
     // while we are using them.
     /// Storage for standard layout arguments.
-    std::vector<std::vector<char>> MArgsStorage;
+    std::optional<std::vector<std::vector<char>>> MArgsStorage;
     /// Storage for accessors.
-    std::vector<detail::AccessorImplPtr> MAccStorage;
+    std::optional<std::vector<detail::AccessorImplPtr>> MAccStorage;
     /// Storage for shared_ptrs.
-    std::vector<std::shared_ptr<const void>> MSharedPtrStorage;
+    std::optional<std::vector<std::shared_ptr<const void>>> MSharedPtrStorage;
 
     /// List of requirements that specify which memory is needed for the command
     /// group to be executed.
-    std::vector<AccessorImplHost *> MRequirements;
+    std::optional<std::vector<AccessorImplHost *>> MRequirements;
     /// List of events that order the execution of this CG
-    std::vector<detail::EventImplPtr> MEvents;
+    std::optional<std::vector<detail::EventImplPtr>> MEvents;
   };
 
   CG(CGType Type, StorageInitHelper D, detail::code_location loc = {},
      bool IsTopCodeLoc = true)
       : MType(Type), MData(std::move(D)) {
+
+//    if (!MData.MArgsStorage.has_value()) {
+//      MData.MArgsStorage = std::vector<std::vector<char>>{};
+//    }
+//
+//    if (!MData.MAccStorage.has_value()) {
+//      MData.MAccStorage = std::vector<detail::AccessorImplPtr>{};
+//    }
+//
+//    if (!MData.MSharedPtrStorage.has_value()) {
+//      MData.MSharedPtrStorage = std::vector<std::shared_ptr<const void>>{};
+//    }
+//
+//    if (!MData.MRequirements.has_value()) {
+//      MData.MRequirements = std::vector<AccessorImplHost *>{};
+//    }
+//
+//    if (!MData.MEvents.has_value()) {
+//      MData.MEvents = std::vector<detail::EventImplPtr>{};
+//    }
+
     // Capture the user code-location from Q.submit(), Q.parallel_for()
     // etc for later use; if code location information is not available,
     // the file name and function name members will be empty strings
@@ -211,19 +232,36 @@ public:
   CGType getType() const { return MType; }
 
   std::vector<std::vector<char>> &getArgsStorage() {
-    return MData.MArgsStorage;
+    if (!MData.MArgsStorage.has_value()) {
+      MData.MArgsStorage = std::vector<std::vector<char>>{};
+    }
+    return MData.MArgsStorage.value();
   }
   std::vector<detail::AccessorImplPtr> &getAccStorage() {
-    return MData.MAccStorage;
+    if (!MData.MAccStorage.has_value()) {
+      MData.MAccStorage = std::vector<detail::AccessorImplPtr>{};
+    }
+    return MData.MAccStorage.value();
   }
   std::vector<std::shared_ptr<const void>> &getSharedPtrStorage() {
-    return MData.MSharedPtrStorage;
+    if (!MData.MSharedPtrStorage.has_value()) {
+      MData.MSharedPtrStorage = std::vector<std::shared_ptr<const void>>{};
+    }
+    return MData.MSharedPtrStorage.value();
   }
 
   std::vector<AccessorImplHost *> &getRequirements() {
-    return MData.MRequirements;
+    if (!MData.MRequirements.has_value()) {
+      MData.MRequirements = std::vector<AccessorImplHost *>{};
+    }
+    return MData.MRequirements.value();
   }
-  std::vector<detail::EventImplPtr> &getEvents() { return MData.MEvents; }
+  std::vector<detail::EventImplPtr> &getEvents() {
+    if (!MData.MEvents.has_value()) {
+      MData.MEvents = std::vector<detail::EventImplPtr>{};
+    }
+    return MData.MEvents.value();
+  }
 
   virtual std::vector<std::shared_ptr<const void>>
   getAuxiliaryResources() const {

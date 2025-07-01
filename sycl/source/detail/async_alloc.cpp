@@ -42,8 +42,11 @@ std::vector<std::shared_ptr<detail::node_impl>> getDepGraphNodes(
   auto DepNodes = Graph->getNodesForEvents(DepEvents);
   // If this node was added explicitly we may have node deps in the handler as
   // well, so add them to the list
-  DepNodes.insert(DepNodes.end(), HandlerImpl->MNodeDeps.begin(),
-                  HandlerImpl->MNodeDeps.end());
+  if (!HandlerImpl->MNodeDeps.has_value()) {
+    HandlerImpl->MNodeDeps = std::vector<std::shared_ptr<ext::oneapi::experimental::detail::node_impl>>{};
+  }
+  DepNodes.insert(DepNodes.end(), HandlerImpl->MNodeDeps.value().begin(),
+                  HandlerImpl->MNodeDeps.value().end());
   // If this is being recorded from an in-order queue we need to get the last
   // in-order node if any, since this will later become a dependency of the
   // node being processed here.
@@ -71,7 +74,10 @@ void *async_malloc(sycl::handler &h, sycl::usm::alloc kind, size_t size) {
   auto &Adapter = h.getContextImpl().getAdapter();
 
   // Get CG event dependencies for this allocation.
-  const auto &DepEvents = h.impl->CGData.MEvents;
+  if (!h.impl->CGData.MEvents.has_value()) {
+    h.impl->CGData.MEvents = std::vector<detail::EventImplPtr>{};
+  }
+  const auto &DepEvents = h.impl->CGData.MEvents.value();
   auto UREvents = getUrEvents(DepEvents);
 
   void *alloc = nullptr;
@@ -121,8 +127,11 @@ __SYCL_EXPORT void *async_malloc_from_pool(sycl::handler &h, size_t size,
   auto &Adapter = h.getContextImpl().getAdapter();
   auto &memPoolImpl = sycl::detail::getSyclObjImpl(pool);
 
+  if (!h.impl->CGData.MEvents.has_value()) {
+    h.impl->CGData.MEvents = std::vector<detail::EventImplPtr>{};
+  }
   // Get CG event dependencies for this allocation.
-  const auto &DepEvents = h.impl->CGData.MEvents;
+  const auto &DepEvents = h.impl->CGData.MEvents.value();
   auto UREvents = getUrEvents(DepEvents);
 
   void *alloc = nullptr;

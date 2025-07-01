@@ -727,6 +727,32 @@ bool Scheduler::areEventsSafeForSchedulerBypass(
                      });
 }
 
+ bool
+Scheduler::areEventsSafeForSchedulerBypass(const std::optional<std::vector<sycl::event>> &DepEvents,
+                                context_impl &Context) {
+  if (!DepEvents.has_value()) {
+    return false;
+  }
+  auto &DepEventsRef = DepEvents.value();
+  return std::all_of(
+      DepEventsRef.begin(), DepEventsRef.end(), [&Context](const sycl::event &Event) {
+        const EventImplPtr &SyclEventImplPtr = detail::getSyclObjImpl(Event);
+        return CheckEventReadiness(Context, SyclEventImplPtr);
+      });
+}
+ bool
+Scheduler::areEventsSafeForSchedulerBypass(const std::optional<std::vector<EventImplPtr>> &DepEvents,
+                                context_impl &Context) {
+  if (!DepEvents.has_value()) {
+    return false;
+  }
+  auto &DepEventsRef = DepEvents.value();
+  return std::all_of(DepEventsRef.begin(), DepEventsRef.end(),
+                     [&Context](const EventImplPtr &SyclEventImplPtr) {
+                       return CheckEventReadiness(Context, SyclEventImplPtr);
+                     });
+}
+
 } // namespace detail
 } // namespace _V1
 } // namespace sycl

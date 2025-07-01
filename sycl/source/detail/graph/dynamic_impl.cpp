@@ -341,13 +341,15 @@ void dynamic_command_group_impl::finalizeCGFList(
     // Track dynamic_parameter usage in command-group
     auto &DynamicParams = Handler.impl->MDynamicParameters;
 
-    if (DynamicParams.size() > 0 &&
-        Handler.getType() == sycl::detail::CGType::CodeplayHostTask) {
-      throw sycl::exception(make_error_code(errc::invalid),
-                            "Cannot use dynamic parameters in a host_task");
-    }
-    for (auto &[DynamicParam, ArgIndex] : DynamicParams) {
-      DynamicParam->registerDynCG(shared_from_this(), CGFIndex, ArgIndex);
+    if (DynamicParams.has_value()) {
+      if (DynamicParams.value().size() > 0 &&
+          Handler.getType() == sycl::detail::CGType::CodeplayHostTask) {
+        throw sycl::exception(make_error_code(errc::invalid),
+                              "Cannot use dynamic parameters in a host_task");
+      }
+      for (auto &[DynamicParam, ArgIndex] : DynamicParams.value()) {
+        DynamicParam->registerDynCG(shared_from_this(), CGFIndex, ArgIndex);
+      }
     }
   }
 

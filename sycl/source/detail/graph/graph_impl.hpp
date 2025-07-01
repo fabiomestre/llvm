@@ -808,7 +808,7 @@ private:
   /// the command-buffer. Returns nullptr otherwise.
   EventImplPtr enqueuePartitionDirectly(
       std::shared_ptr<partition> &Partition, sycl::detail::queue_impl &Queue,
-      std::vector<detail::EventImplPtr> &WaitEvents, bool EventNeeded);
+      std::optional<std::vector<detail::EventImplPtr>> &WaitEvents, bool EventNeeded);
 
   /// Enqueues all the partitions in a graph.
   /// @param Queue Command-queue to schedule execution on.

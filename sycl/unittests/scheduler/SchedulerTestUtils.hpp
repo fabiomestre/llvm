@@ -228,7 +228,12 @@ public:
   using sycl::handler::impl;
   using sycl::handler::setNDRangeDescriptor;
 
-  sycl::detail::NDRDescT &getNDRDesc() { return impl->MNDRDesc; }
+  sycl::detail::NDRDescT &getNDRDesc() {
+    if (!impl->MNDRDesc.has_value()) {
+      impl->MNDRDesc = sycl::detail::NDRDescT{};
+    }
+    return impl->MNDRDesc.value();
+  }
   sycl::detail::code_location &getCodeLoc() { return MCodeLoc; }
   std::vector<std::shared_ptr<sycl::detail::stream_impl>> &getStreamStorage() {
     return MStreamStorage;
@@ -237,21 +242,42 @@ public:
     return MHostKernel;
   }
   std::vector<std::vector<char>> &getArgsStorage() {
-    return impl->CGData.MArgsStorage;
+    if (!impl->CGData.MArgsStorage.has_value()) {
+      impl->CGData.MArgsStorage = std::vector<std::vector<char>>{};
+    }
+    return impl->CGData.MArgsStorage.value();
   }
   std::vector<sycl::detail::AccessorImplPtr> &getAccStorage() {
-    return impl->CGData.MAccStorage;
+    if (!impl->CGData.MAccStorage.has_value()) {
+      impl->CGData.MAccStorage = std::vector<sycl::detail::AccessorImplPtr>{};
+    }
+    return impl->CGData.MAccStorage.value();
   }
   std::vector<std::shared_ptr<const void>> &getSharedPtrStorage() {
-    return impl->CGData.MSharedPtrStorage;
+    if (!impl->CGData.MSharedPtrStorage.has_value()) {
+      impl->CGData.MSharedPtrStorage = std::vector<std::shared_ptr<const void>>{};
+    }
+    return impl->CGData.MSharedPtrStorage.value();
   }
-  std::vector<sycl::detail::Requirement *> &getRequirements() {
-    return impl->CGData.MRequirements;
+
+  std::vector<sycl::detail::AccessorImplHost *> &getRequirements() {
+    if (!impl->CGData.MRequirements.has_value()) {
+      impl->CGData.MRequirements = std::vector<sycl::detail::AccessorImplHost *>{};
+    }
+    return impl->CGData.MRequirements.value();
   }
   std::vector<sycl::detail::EventImplPtr> &getEvents() {
-    return impl->CGData.MEvents;
+    if (!impl->CGData.MEvents.has_value()) {
+      impl->CGData.MEvents = std::vector<sycl::detail::EventImplPtr>{};
+    }
+    return impl->CGData.MEvents.value();
   }
-  std::vector<sycl::detail::ArgDesc> &getArgs() { return impl->MArgs; }
+  std::vector<sycl::detail::ArgDesc> &getArgs() {
+    if (!impl->MArgs.has_value()) {
+      impl->MArgs = std::vector<sycl::detail::ArgDesc>{};
+    }
+    return impl->MArgs.value();
+  }
   sycl::detail::KernelNameStrT getKernelName() {
     return toKernelNameStrT(MKernelName);
   }

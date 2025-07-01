@@ -442,8 +442,12 @@ event handler::finalize() {
   const bool IsGraphRelated =
       IsQueueBeingRecorded || IsExplicitGraphAPI || IsGraphEnqueue;
 
+  if (impl->CGData.MRequirements.has_value()) {
+    assert(!impl->CGData.MRequirements.value().empty());
+  }
+
   const bool KernelFastPath =
-      (Queue && !IsGraphRelated && !impl->CGData.MRequirements.size() &&
+      (Queue && !IsGraphRelated && !impl->CGData.MRequirements.has_value() &&
        !MStreamStorage.size() &&
        detail::Scheduler::areEventsSafeForSchedulerBypass(
            impl->CGData.MEvents, Queue->getContextImpl()));
@@ -461,29 +465,34 @@ event handler::finalize() {
   // According to 4.7.6.9 of SYCL2020 spec, if a placeholder accessor is passed
   // to a command without being bound to a command group, an exception should
   // be thrown.
-  if (!IsGraphEnqueue)
+  if (!IsGraphEnqueue && impl->MArgs.has_value())
   {
-    for (const auto &arg : impl->MArgs) {
+    for (const auto &arg : impl->MArgs.value()) {
       if (arg.MType != detail::kernel_param_kind_t::kind_accessor)
         continue;
 
       detail::Requirement *AccImpl =
           static_cast<detail::Requirement *>(arg.MPtr);
       if (AccImpl->MIsPlaceH) {
-        auto It = std::find(impl->CGData.MRequirements.begin(),
-                            impl->CGData.MRequirements.end(), AccImpl);
-        if (It == impl->CGData.MRequirements.end())
+        if (!impl->CGData.MRequirements.has_value()) {
+          impl->CGData.MRequirements = std::vector<detail::AccessorImplHost *>{};
+        }
+        auto It = std::find(impl->CGData.MRequirements.value().begin(),
+                            impl->CGData.MRequirements.value().end(), AccImpl);
+        if (It == impl->CGData.MRequirements.value().end())
           throw sycl::exception(make_error_code(errc::kernel_argument),
                                 "placeholder accessor must be bound by calling "
                                 "handler::require() before it can be used.");
 
         // Check associated accessors
         bool AccFound = false;
-        for (detail::ArgDesc &Acc : impl->MAssociatedAccesors) {
-          if ((Acc.MType == detail::kernel_param_kind_t::kind_accessor) &&
-              static_cast<detail::Requirement *>(Acc.MPtr) == AccImpl) {
-            AccFound = true;
-            break;
+        if (impl->MAssociatedAccesors.has_value()) {
+          for (detail::ArgDesc &Acc : impl->MAssociatedAccesors.value()) {
+            if ((Acc.MType == detail::kernel_param_kind_t::kind_accessor) &&
+                static_cast<detail::Requirement *>(Acc.MPtr) == AccImpl) {
+              AccFound = true;
+              break;
+            }
           }
         }
 
@@ -559,12 +568,22 @@ event handler::finalize() {
     }
 
     if (KernelFastPath) {
+      if (!impl->MArgs.has_value()) {
+        impl->MArgs = std::vector<detail::ArgDesc>{};
+      }
+      if (!impl->MNDRDesc.has_value()) {
+        impl->MNDRDesc = detail::NDRDescT{};
+      }
+
       // if user does not add a new dependency to the dependency graph, i.e.
       // the graph is not changed, then this faster path is used to submit
       // kernel bypassing scheduler and avoiding CommandGroup, Command objects
       // creation.
+      if (!impl->CGData.MEvents.has_value()) {
+        impl->CGData.MEvents = std::vector<detail::EventImplPtr>{};
+      }
       std::vector<ur_event_handle_t> RawEvents = detail::Command::getUrEvents(
-          impl->CGData.MEvents, Queue, false);
+          impl->CGData.MEvents.value(), Queue, false);
 
       bool DiscardEvent =
           !impl->MEventNeeded && impl->get_queue().supportsDiscardingPiEvents();
@@ -595,8 +614,8 @@ event handler::finalize() {
           std::tie(CmdTraceEvent, InstanceID) = emitKernelInstrumentationData(
               StreamID, MKernel, MCodeLoc, impl->MIsTopCodeLoc,
               MKernelName.data(), impl->MKernelNameBasedCachePtr,
-              Queue, impl->MNDRDesc, KernelBundleImpPtr,
-              impl->MArgs);
+              Queue, impl->MNDRDesc.value(), KernelBundleImpPtr,
+              impl->MArgs.value());
           detail::emitInstrumentationGeneral(StreamID, InstanceID,
                                              CmdTraceEvent,
                                              xpti::trace_task_begin, nullptr);
@@ -609,7 +628,7 @@ event handler::finalize() {
           assert(BinImage && "Failed to obtain a binary image.");
         }
         enqueueImpKernel(
-            impl->get_queue(), impl->MNDRDesc, impl->MArgs, KernelBundleImpPtr,
+            impl->get_queue(), impl->MNDRDesc.value(), impl->MArgs.value(), KernelBundleImpPtr,
             MKernel.get(), toKernelNameStrT(MKernelName),
             impl->MKernelNameBasedCachePtr, RawEvents, ResultEvent.get(),
             nullptr, impl->MKernelCacheConfig, impl->MKernelIsCooperative,
@@ -645,8 +664,11 @@ event handler::finalize() {
         // connect returned event with dependent events
         if (!Queue->isInOrder()) {
           // MEvents is not used anymore, so can move.
+          if (!impl->CGData.MEvents.has_value()) {
+            impl->CGData.MEvents = std::vector<detail::EventImplPtr>{};
+          }
           ResultEvent->getPreparedDepsEvents() =
-              std::move(impl->CGData.MEvents);
+              std::move(impl->CGData.MEvents.value());
           // ResultEvent is local for current thread, no need to lock.
           ResultEvent->cleanDepEventsThroughOneLevelUnlocked();
         }
@@ -669,12 +691,21 @@ event handler::finalize() {
     // running of this method by reductions implementation. This allows for
     // assert feature to check if kernel uses assertions
 #endif
+    if (!impl->MArgs.has_value()) {
+      impl->MArgs = std::vector<detail::ArgDesc>{};
+    }
+    if (!impl->MNDRDesc.has_value()) {
+      impl->MNDRDesc = detail::NDRDescT{};
+    }
+    if (!impl->MAuxiliaryResources.has_value()) {
+      impl->MAuxiliaryResources = std::vector<std::shared_ptr<const void>>{};
+    }
     CommandGroup.reset(new detail::CGExecKernel(
-        std::move(impl->MNDRDesc), std::move(MHostKernel), std::move(MKernel),
+        std::move(impl->MNDRDesc.value()), std::move(MHostKernel), std::move(MKernel),
         std::move(impl->MKernelBundle), std::move(impl->CGData),
-        std::move(impl->MArgs), toKernelNameStrT(MKernelName),
+        std::move(impl->MArgs.value()), toKernelNameStrT(MKernelName),
         impl->MKernelNameBasedCachePtr, MStreamStorage,
-        std::move(impl->MAuxiliaryResources), getType(),
+        std::move(impl->MAuxiliaryResources.value()), getType(),
         impl->MKernelCacheConfig, impl->MKernelIsCooperative,
         impl->MKernelUsesClusterLaunch, impl->MKernelWorkGroupMemorySize,
         MCodeLoc));
@@ -682,11 +713,17 @@ event handler::finalize() {
   }
   case detail::CGType::CopyAccToPtr:
   case detail::CGType::CopyPtrToAcc:
-  case detail::CGType::CopyAccToAcc:
+  case detail::CGType::CopyAccToAcc: {
+
+    if (!impl->MAuxiliaryResources.has_value()) {
+      impl->MAuxiliaryResources = std::vector<std::shared_ptr<const void>>{};
+    }
     CommandGroup.reset(
         new detail::CGCopy(getType(), MSrcPtr, MDstPtr, std::move(impl->CGData),
-                           std::move(impl->MAuxiliaryResources), MCodeLoc));
+                           std::move(impl->MAuxiliaryResources.value()),
+                           MCodeLoc));
     break;
+  }
   case detail::CGType::Fill:
     CommandGroup.reset(new detail::CGFill(std::move(MPattern), MDstPtr,
                                           std::move(impl->CGData), MCodeLoc));
@@ -730,26 +767,38 @@ event handler::finalize() {
     break;
   case detail::CGType::EnqueueNativeCommand:
   case detail::CGType::CodeplayHostTask: {
+    if (!impl->MArgs.has_value()) {
+      impl->MArgs = std::vector<detail::ArgDesc>{};
+    }
     detail::context_impl &Context = impl->get_context();
     CommandGroup.reset(new detail::CGHostTask(
-        std::move(impl->MHostTask), Queue, &Context, std::move(impl->MArgs),
+        std::move(impl->MHostTask), Queue, &Context, std::move(impl->MArgs.value()),
         std::move(impl->CGData), getType(), MCodeLoc));
     break;
   }
   case detail::CGType::Barrier:
   case detail::CGType::BarrierWaitlist: {
+    if (!impl->MEventsWaitWithBarrier.has_value()) {
+      impl->MEventsWaitWithBarrier = std::vector<detail::EventImplPtr>{};
+    }
     if (auto GraphImpl = getCommandGraph(); GraphImpl != nullptr) {
-      impl->CGData.MEvents.insert(std::end(impl->CGData.MEvents),
-                                  std::begin(impl->MEventsWaitWithBarrier),
-                                  std::end(impl->MEventsWaitWithBarrier));
+      if (!impl->CGData.MEvents.has_value()) {
+        impl->CGData.MEvents = std::vector<detail::EventImplPtr>{};
+      }
+      impl->CGData.MEvents.value().insert(std::end(impl->CGData.MEvents.value()),
+                                  std::begin(impl->MEventsWaitWithBarrier.value()),
+                                  std::end(impl->MEventsWaitWithBarrier.value()));
       // Barrier node is implemented as an empty node in Graph
       // but keep the barrier type to help managing dependencies
       setType(detail::CGType::Barrier);
       CommandGroup.reset(new detail::CG(detail::CGType::Barrier,
                                         std::move(impl->CGData), MCodeLoc));
     } else {
+      if (!impl->MEventsWaitWithBarrier.has_value()) {
+        impl->MEventsWaitWithBarrier = std::vector<detail::EventImplPtr>{};
+      }
       CommandGroup.reset(new detail::CGBarrier(
-          std::move(impl->MEventsWaitWithBarrier), impl->MEventMode,
+          std::move(impl->MEventsWaitWithBarrier.value()), impl->MEventMode,
           std::move(impl->CGData), getType(), MCodeLoc));
     }
     break;
@@ -944,7 +993,10 @@ event handler::finalize() {
 }
 
 void handler::addReduction(const std::shared_ptr<const void> &ReduObj) {
-  impl->MAuxiliaryResources.push_back(ReduObj);
+  if (!impl->MAuxiliaryResources.has_value()) {
+    impl->MAuxiliaryResources = std::vector<std::shared_ptr<const void>>{};
+  }
+  impl->MAuxiliaryResources.value().push_back(ReduObj);
 }
 
 void handler::associateWithHandlerCommon(detail::AccessorImplPtr AccImpl,
@@ -963,12 +1015,21 @@ void handler::associateWithHandlerCommon(detail::AccessorImplPtr AccImpl,
   }
   // Add accessor to the list of requirements.
   if (Req->MAccessRange.size() != 0)
-    impl->CGData.MRequirements.push_back(Req);
+    if (!impl->CGData.MRequirements.has_value()) {
+      impl->CGData.MRequirements = std::vector<detail::AccessorImplHost *>{};
+    }
+  impl->CGData.MRequirements.value().push_back(Req);
   // Store copy of the accessor.
-  impl->CGData.MAccStorage.push_back(std::move(AccImpl));
+  if (!impl->CGData.MAccStorage.has_value()) {
+    impl->CGData.MAccStorage = std::vector<detail::AccessorImplPtr>{};
+  }
+  impl->CGData.MAccStorage.value().push_back(std::move(AccImpl));
   // Add an accessor to the handler list of associated accessors.
   // For associated accessors index does not means nothing.
-  impl->MAssociatedAccesors.emplace_back(
+  if (!impl->MAssociatedAccesors.has_value()) {
+    impl->MAssociatedAccesors = std::vector<detail::ArgDesc>{};
+  }
+  impl->MAssociatedAccesors.value().emplace_back(
       detail::kernel_param_kind_t::kind_accessor, Req, AccTarget, /*index*/ 0);
 }
 
@@ -1079,9 +1140,15 @@ void handler::processArg(void *Ptr, const detail::kernel_param_kind_t &Kind,
         static_cast<detail::AccessorBaseHost *>(&S->GlobalBuf);
     detail::AccessorImplPtr GBufImpl = detail::getSyclObjImpl(*GBufBase);
     detail::Requirement *GBufReq = GBufImpl.get();
+    if(!impl->MNDRDesc.has_value()) {
+      impl->MNDRDesc = detail::NDRDescT{};
+    }
+    if(!impl->MArgs.has_value()) {
+      impl->MArgs = std::vector<detail::ArgDesc>{};
+    }
     addArgsForGlobalAccessor(
         GBufReq, Index, IndexShift, Size, IsKernelCreatedFromSource,
-        impl->MNDRDesc.GlobalSize.size(), impl->MArgs, IsESIMD);
+        impl->MNDRDesc.value().GlobalSize.size(), impl->MArgs.value(), IsESIMD);
     ++IndexShift;
     detail::AccessorBaseHost *GOffsetBase =
         static_cast<detail::AccessorBaseHost *>(&S->GlobalOffset);
@@ -1089,14 +1156,14 @@ void handler::processArg(void *Ptr, const detail::kernel_param_kind_t &Kind,
     detail::Requirement *GOffsetReq = GOfssetImpl.get();
     addArgsForGlobalAccessor(
         GOffsetReq, Index, IndexShift, Size, IsKernelCreatedFromSource,
-        impl->MNDRDesc.GlobalSize.size(), impl->MArgs, IsESIMD);
+        impl->MNDRDesc.value().GlobalSize.size(), impl->MArgs.value(), IsESIMD);
     ++IndexShift;
     detail::AccessorBaseHost *GFlushBase =
         static_cast<detail::AccessorBaseHost *>(&S->GlobalFlushBuf);
     detail::AccessorImplPtr GFlushImpl = detail::getSyclObjImpl(*GFlushBase);
     detail::Requirement *GFlushReq = GFlushImpl.get();
 
-    size_t GlobalSize = impl->MNDRDesc.GlobalSize.size();
+    size_t GlobalSize = impl->MNDRDesc.value().GlobalSize.size();
     // If work group size wasn't set explicitly then it must be recieved
     // from kernel attribute or set to default values.
     // For now we can't get this attribute here.
@@ -1104,10 +1171,10 @@ void handler::processArg(void *Ptr, const detail::kernel_param_kind_t &Kind,
     // TODO adjust MNDRDesc when device image contains kernel's attribute
     if (GlobalSize == 0) {
       // Suppose that work group size is 1 for every dimension
-      GlobalSize = impl->MNDRDesc.NumWorkGroups.size();
+      GlobalSize = impl->MNDRDesc.value().NumWorkGroups.size();
     }
     addArgsForGlobalAccessor(GFlushReq, Index, IndexShift, Size,
-                             IsKernelCreatedFromSource, GlobalSize, impl->MArgs,
+                             IsKernelCreatedFromSource, GlobalSize, impl->MArgs.value(),
                              IsESIMD);
     ++IndexShift;
     addArg(kernel_param_kind_t::kind_std_layout, &S->FlushBufferSize,
@@ -1116,6 +1183,12 @@ void handler::processArg(void *Ptr, const detail::kernel_param_kind_t &Kind,
     break;
   }
   case kernel_param_kind_t::kind_accessor: {
+    if(!impl->MNDRDesc.has_value()) {
+      impl->MNDRDesc = detail::NDRDescT{};
+    }
+    if(!impl->MArgs.has_value()) {
+      impl->MArgs = std::vector<detail::ArgDesc>{};
+    }
     // For args kind of accessor Size is information about accessor.
     // The first 11 bits of Size encodes the accessor target.
     const access::target AccTarget =
@@ -1126,7 +1199,7 @@ void handler::processArg(void *Ptr, const detail::kernel_param_kind_t &Kind,
       detail::Requirement *AccImpl = static_cast<detail::Requirement *>(Ptr);
       addArgsForGlobalAccessor(
           AccImpl, Index, IndexShift, Size, IsKernelCreatedFromSource,
-          impl->MNDRDesc.GlobalSize.size(), impl->MArgs, IsESIMD);
+          impl->MNDRDesc.value().GlobalSize.size(), impl->MArgs.value(), IsESIMD);
       break;
     }
     case access::target::local: {
@@ -1134,7 +1207,7 @@ void handler::processArg(void *Ptr, const detail::kernel_param_kind_t &Kind,
           static_cast<detail::LocalAccessorImplHost *>(Ptr);
 
       addArgsForLocalAccessor(LAccImpl, Index, IndexShift,
-                              IsKernelCreatedFromSource, impl->MArgs, IsESIMD);
+                              IsKernelCreatedFromSource, impl->MArgs.value(), IsESIMD);
       break;
     }
     case access::target::image:
@@ -1158,6 +1231,9 @@ void handler::processArg(void *Ptr, const detail::kernel_param_kind_t &Kind,
     break;
   }
   case kernel_param_kind_t::kind_dynamic_accessor: {
+    if(!impl->MArgs.has_value()) {
+      impl->MArgs = std::vector<detail::ArgDesc>{};
+    }
     const access::target AccTarget =
         static_cast<access::target>(Size & AccessTargetMask);
     switch (AccTarget) {
@@ -1177,7 +1253,7 @@ void handler::processArg(void *Ptr, const detail::kernel_param_kind_t &Kind,
 
       addArgsForLocalAccessor(&DynLocalAccessorImpl->LAccImplHost, Index,
                               IndexShift, IsKernelCreatedFromSource,
-                              impl->MArgs, IsESIMD);
+                              impl->MArgs.value(), IsESIMD);
       break;
     }
     default: {
@@ -1228,10 +1304,17 @@ void handler::processArg(void *Ptr, const detail::kernel_param_kind_t &Kind,
 }
 
 void handler::setArgHelper(int ArgIndex, detail::work_group_memory_impl &Arg) {
-  impl->MWorkGroupMemoryObjects.push_back(
+  if(!impl->MWorkGroupMemoryObjects.has_value()) {
+    impl->MWorkGroupMemoryObjects = std::vector<std::shared_ptr<detail::work_group_memory_impl>>{};
+  }
+  if (!impl->MWorkGroupMemoryObjects.has_value()) {
+    impl->MWorkGroupMemoryObjects = std::vector<std::shared_ptr<detail::work_group_memory_impl>>{};
+  }
+
+  impl->MWorkGroupMemoryObjects.value().push_back(
       std::make_shared<detail::work_group_memory_impl>(Arg));
   addArg(detail::kernel_param_kind_t::kind_work_group_memory,
-         impl->MWorkGroupMemoryObjects.back().get(), 0, ArgIndex);
+         impl->MWorkGroupMemoryObjects.value().back().get(), 0, ArgIndex);
 }
 
 void handler::setArgHelper(int ArgIndex, stream &&Str) {
@@ -1251,8 +1334,11 @@ void handler::setArgHelper(int ArgIndex, stream &&Str) {
 inline constexpr size_t MaxNumAdditionalArgs = 13;
 
 void handler::extractArgsAndReqs() {
+  if(!impl->MArgs.has_value()) {
+    impl->MArgs = std::vector<detail::ArgDesc>{};
+  }
   assert(MKernel && "MKernel is not initialized");
-  std::vector<detail::ArgDesc> UnPreparedArgs = std::move(impl->MArgs);
+  std::vector<detail::ArgDesc> UnPreparedArgs = std::move(impl->MArgs.value());
   clearArgs();
 
   std::sort(
@@ -1262,7 +1348,8 @@ void handler::extractArgsAndReqs() {
       });
 
   const bool IsKernelCreatedFromSource = MKernel->isCreatedFromSource();
-  impl->MArgs.reserve(MaxNumAdditionalArgs * UnPreparedArgs.size());
+
+  impl->MArgs.value().reserve(MaxNumAdditionalArgs * UnPreparedArgs.size());
 
   size_t IndexShift = 0;
   for (size_t I = 0; I < UnPreparedArgs.size(); ++I) {
@@ -1278,8 +1365,11 @@ void handler::extractArgsAndReqs() {
 void handler::extractArgsAndReqsFromLambda(
     char *LambdaPtr, detail::kernel_param_desc_t (*ParamDescGetter)(int),
     size_t NumKernelParams, bool IsESIMD) {
+  if(!impl->MArgs.has_value()) {
+    impl->MArgs = std::vector<detail::ArgDesc>{};
+  }
   size_t IndexShift = 0;
-  impl->MArgs.reserve(MaxNumAdditionalArgs * NumKernelParams);
+  impl->MArgs.value().reserve(MaxNumAdditionalArgs * NumKernelParams);
 
   for (size_t I = 0; I < NumKernelParams; ++I) {
     detail::kernel_param_desc_t ParamDesc = ParamDescGetter(I);
@@ -1335,7 +1425,10 @@ void handler::extractArgsAndReqsFromLambda(
     bool IsESIMD) {
   const bool IsKernelCreatedFromSource = false;
   size_t IndexShift = 0;
-  impl->MArgs.reserve(MaxNumAdditionalArgs * ParamDescs.size());
+  if(!impl->MArgs.has_value()) {
+    impl->MArgs = std::vector<detail::ArgDesc>{};
+  }
+  impl->MArgs.value().reserve(MaxNumAdditionalArgs * ParamDescs.size());
 
   for (size_t I = 0; I < ParamDescs.size(); ++I) {
     void *Ptr = LambdaPtr + ParamDescs[I].offset;
@@ -1399,9 +1492,12 @@ void handler::verifyUsedKernelBundleInternal(detail::string_view KernelName) {
 }
 
 void handler::ext_oneapi_barrier(const std::vector<event> &WaitList) {
+  if(!impl->MEventsWaitWithBarrier.has_value()) {
+    impl->MEventsWaitWithBarrier = std::vector<detail::EventImplPtr>{};
+  }
   throwIfActionIsCreated();
   setType(detail::CGType::BarrierWaitlist);
-  impl->MEventsWaitWithBarrier.reserve(WaitList.size());
+  impl->MEventsWaitWithBarrier.value().reserve(WaitList.size());
   for (auto &Event : WaitList) {
     auto EventImpl = detail::getSyclObjImpl(Event);
     // We could not wait for host task events in backend.
@@ -1409,7 +1505,7 @@ void handler::ext_oneapi_barrier(const std::vector<event> &WaitList) {
     if (EventImpl->isHost()) {
       depends_on(EventImpl);
     }
-    impl->MEventsWaitWithBarrier.push_back(EventImpl);
+    impl->MEventsWaitWithBarrier.value().push_back(EventImpl);
   }
 }
 
@@ -2033,7 +2129,10 @@ void handler::depends_on(const detail::EventImplPtr &EventImpl) {
           "Graph nodes cannot depend on events from another graph.");
     }
   }
-  impl->CGData.MEvents.push_back(EventImpl);
+  if (!impl->CGData.MEvents.has_value()) {
+    impl->CGData.MEvents = std::vector<detail::EventImplPtr>{};
+  }
+  impl->CGData.MEvents.value().push_back(EventImpl);
 }
 
 void handler::depends_on(const std::vector<detail::EventImplPtr> &Events) {
@@ -2249,8 +2348,11 @@ void handler::setKernelClusterLaunch(sycl::range<3> ClusterSize, int Dims) {
   throwIfGraphAssociated<
       syclex::detail::UnsupportedGraphFeatures::
           sycl_ext_oneapi_experimental_cuda_cluster_launch>();
+  if(!impl->MNDRDesc.has_value()) {
+    impl->MNDRDesc = detail::NDRDescT{};
+  }
   impl->MKernelUsesClusterLaunch = true;
-  impl->MNDRDesc.setClusterDimensions(ClusterSize, Dims);
+  impl->MNDRDesc.value().setClusterDimensions(ClusterSize, Dims);
 }
 
 void handler::setKernelWorkGroupMem(size_t Size) {
@@ -2327,8 +2429,11 @@ void handler::registerDynamicParameter(
         make_error_code(errc::invalid),
         "Dynamic Parameters cannot be used with normal SYCL submissions");
   }
-
-  impl->MDynamicParameters.emplace_back(DynamicParamImpl, ArgIndex);
+if (!impl->MDynamicParameters.has_value()) {
+  impl->MDynamicParameters = std::vector<std::pair<
+      ext::oneapi::experimental::detail::dynamic_parameter_impl *, int>>{};
+}
+  impl->MDynamicParameters.value().emplace_back(DynamicParamImpl, ArgIndex);
 }
 
 #ifndef __INTEL_PREVIEW_BREAKING_CHANGES
@@ -2346,8 +2451,11 @@ void handler::registerDynamicParameter(
 bool handler::eventNeeded() const { return impl->MEventNeeded; }
 
 void *handler::storeRawArg(const void *Ptr, size_t Size) {
-  impl->CGData.MArgsStorage.emplace_back(Size);
-  void *Storage = static_cast<void *>(impl->CGData.MArgsStorage.back().data());
+  if (!impl->CGData.MArgsStorage.has_value()) {
+    impl->CGData.MArgsStorage = std::vector<std::vector<char>>{};
+  }
+  impl->CGData.MArgsStorage.value().emplace_back(Size);
+  void *Storage = static_cast<void *>(impl->CGData.MArgsStorage.value().back().data());
   std::memcpy(Storage, Ptr, Size);
   return Storage;
 }
@@ -2368,37 +2476,61 @@ void handler::SetHostTask(std::function<void(interop_handle)> &&Func) {
 // TODO: This function is not used anymore, remove it in the next
 // ABI-breaking window.
 void handler::addAccessorReq(detail::AccessorImplPtr Accessor) {
+  if (!impl->CGData.MRequirements.has_value()) {
+    impl->CGData.MRequirements = std::vector<detail::AccessorImplHost *>{};
+  }
+  if (!impl->CGData.MAccStorage.has_value()) {
+    impl->CGData.MAccStorage = std::vector<detail::AccessorImplPtr>{};
+  }
   // Add accessor to the list of requirements.
-  impl->CGData.MRequirements.push_back(Accessor.get());
+  impl->CGData.MRequirements.value().push_back(Accessor.get());
   // Store copy of the accessor.
-  impl->CGData.MAccStorage.push_back(std::move(Accessor));
+  impl->CGData.MAccStorage.value().push_back(std::move(Accessor));
 }
 #endif
 
 void handler::addLifetimeSharedPtrStorage(std::shared_ptr<const void> SPtr) {
-  impl->CGData.MSharedPtrStorage.push_back(std::move(SPtr));
+  if(!impl->CGData.MSharedPtrStorage.has_value()) {
+    impl->CGData.MSharedPtrStorage = std::vector<std::shared_ptr<const void>>{};
+  }
+  impl->CGData.MSharedPtrStorage.value().push_back(std::move(SPtr));
 }
 
 void handler::addArg(detail::kernel_param_kind_t ArgKind, void *Req,
                      int AccessTarget, int ArgIndex) {
-  impl->MArgs.emplace_back(ArgKind, Req, AccessTarget, ArgIndex);
+  if (!impl->MArgs.has_value()) {
+    impl->MArgs = std::vector<detail::ArgDesc>{};
+  }
+  impl->MArgs.value().emplace_back(ArgKind, Req, AccessTarget, ArgIndex);
 }
 
-void handler::clearArgs() { impl->MArgs.clear(); }
+void handler::clearArgs() {
+  //FIXME
+  impl->MArgs = std::vector<detail::ArgDesc>{};
+}
 
 void handler::setArgsToAssociatedAccessors() {
-  impl->MArgs = impl->MAssociatedAccesors;
+  if ( impl->MAssociatedAccesors.has_value()) {
+    if (!impl->MArgs.has_value()) {
+      impl->MArgs = std::vector<detail::ArgDesc>{};
+    }
+
+    impl->MArgs.value() = impl->MAssociatedAccesors.value();
+  }
 }
 
 bool handler::HasAssociatedAccessor(detail::AccessorImplHost *Req,
                                     access::target AccessTarget) const {
+  if (!impl->MAssociatedAccesors.has_value()) {
+    return false;
+  }
   return std::find_if(
-             impl->MAssociatedAccesors.cbegin(),
-             impl->MAssociatedAccesors.cend(), [&](const detail::ArgDesc &AD) {
+             impl->MAssociatedAccesors.value().cbegin(),
+             impl->MAssociatedAccesors.value().cend(), [&](const detail::ArgDesc &AD) {
                return AD.MType == detail::kernel_param_kind_t::kind_accessor &&
                       AD.MPtr == Req &&
                       AD.MSize == static_cast<int>(AccessTarget);
-             }) == impl->MAssociatedAccesors.end();
+             }) == impl->MAssociatedAccesors.value().end();
 }
 
 void handler::setType(sycl::detail::CGType Type) { impl->MCGType = Type; }
